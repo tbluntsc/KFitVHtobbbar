@@ -28,16 +28,16 @@ Saved_Fits = ROOT.TFile( 'Egen_to_Ereco_fits.root', 'RECREATE')
 Saved_Fits.cd()
 
 eta_directories = []
+no_fits = 15
+interval_width = 10
+fit_params = np.zeros((no_fits,2,3,len(regions)))
 
 for region in range(len(regions)):
-    eta_dir = Saved_Fits.mkdir("eta" + str(region), "Eta region between " + str(regions[region][0]) + " and " + str(regions[region][1]))
+    eta_dir = Saved_Fits.mkdir("eta" + str(region), "Eta region between " + str(regions[region][0]) + " and " + str(regions[region][1]) + ", Interval width = " + str(interval_width))
     eta_directories.append(eta_dir)
     for flavour in HadronFlavours:
         eta_dir.cd()
         flavour_dir = eta_dir.mkdir("Flavour"+str(flavour), "Flavour == "+str(flavour))
-no_fits = 15
-interval_width = 10
-fit_params = np.zeros((no_fits,2,3,len(regions)))
 
 for region in range(len(regions)):
 
@@ -53,7 +53,7 @@ for region in range(len(regions)):
             #Create the strings that limit the data to the range of the Eta & RecoPt intervals & to the current Hadron Flavour
 
             string1 = []
-            string1.append('GenPt>>h_')
+            string1.append('GenPt-RecoPt>>h_')
             string1.append(str(i))
             string1 = "".join(string1)
 
@@ -68,8 +68,9 @@ for region in range(len(regions)):
             string2.append(str(regions[region][1]))
             string2.append(' && GenFlavour == ')
             string2.append(str(flavour))
+            string2.append(' && GenPt != 0')
             string2 = "".join(string2)
-
+            
             substr = []
             substr.append('h_')
             substr.append(str(i))
