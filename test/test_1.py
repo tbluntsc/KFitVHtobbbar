@@ -2,7 +2,10 @@ import os
 import ROOT
 import numpy as n
 
-out = ROOT.TFile("Egen_to_Ereco.root", "UPDATE")
+#Note the _small in the name of the root file: to try out new features
+#loading all 25 files takes too long, so a smaller version of the root
+#file will be created, only reading one of the root file in "address"
+out = ROOT.TFile("Egen_to_Ereco_small.root", "UPDATE")
 address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
 
 #Create an empty Tree 
@@ -70,16 +73,14 @@ chain.SetBranchStatus("nJet", True)
 
 print "Total number of entries: ", chain.GetEntries()
 
-for iev in range(int( min(1e+11, chain.GetEntries()))):
+#To speed up runtime 3e+3 instead of 1e+11
+for iev in range(int( min(3e+3, chain.GetEntries()))):
     chain.GetEntry(iev)
     ev = chain
     if iev%1000 == 0:
         print "Processing event ", iev+1
     for jets in xrange(ev.nJet):
 
-        if iev%100 == 0:
-            print ev.Jet_pt[jets]
-            print ev.nJet
         Jet_pt[0] = ev.Jet_pt[jets]
         Jet_hadronFlavour[0] = ev.Jet_hadronFlavour[jets]
         Jet_mcPt[0] = ev.Jet_mcPt[jets]

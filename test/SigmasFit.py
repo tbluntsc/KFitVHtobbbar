@@ -55,8 +55,8 @@ for i in xrange(no_regions):
     current_eta_dir = RootFile.GetDirectory("eta"+str(i))
     for flavour in [0,5]:
         current_eta_dir.cd("Flavour"+str(flavour))
-        Test = ROOT.TH1F("Sigmas", "Fitted Sigma values for Eta in ["+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour) , no_fits, 2.0*interval_width , (no_fits+2)*(interval_width))
-        Mean = ROOT.TH1F("Mean", "Fitted Mean values for Eta in "+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour), no_fits, 2.0*interval_width, (no_fits+2)*(interval_width))
+        Test = ROOT.TH1F("Sigmas_"+str(i)+"_"+str(flavour), "Fitted Sigma values for Eta in ["+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour) , no_fits, 2.0*interval_width , (no_fits+2)*(interval_width))
+        Mean = ROOT.TH1F("Mean_"+str(i)+"_"+str(flavour), "Fitted Mean values for Eta in "+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour), no_fits, 2.0*interval_width, (no_fits+2)*(interval_width))
 
         Test.SetMarkerSize(3)
         Test.SetMarkerStyle(5)
