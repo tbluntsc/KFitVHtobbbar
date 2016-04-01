@@ -12,6 +12,24 @@ address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/
 #Create an empty Tree 
 tree = ROOT.TTree("ChiSquareFits", "Tree containing results from kinematic fit")
 
+#Initialize branches of tree
+maxJet=100
+nJet = np.zeros(1, dtype = int)
+estimates = np.zeros(maxJet, dtype = np.float64())
+measurements = np.zeros(maxJet, dtype = np.float64())
+etas = np.zeros(maxJet, dtype = np.float64())
+higgs_tag = np.zeros(maxJet, dtype = int)
+est_mass = np.zeros(1, dtype = np.float64())
+mea_mass = np.zeros(1, dtype = np.float64())
+
+tree.Branch('nJet', nJet, 'nJet/I')
+tree.Branch('estimates', estimates, "estimates[nJet]/D")
+tree.Branch('measurements', measurements, "measurements[nJet]/D")
+tree.Branch('etas', etas, "etas[nJet]/D")
+tree.Branch('higgs_tag', higgs_tag, "higgs_tag[nJet]/I")
+tree.Branch('est_mass', est_mass, "est_mass/D")
+tree.Branch('mea_mass', mea_mass, "mea_mass/D")
+
 #Create array w. strings corresponding to tree names (i.e. tree_1.root, tree_2.root etc.)
 no_of_files = 1
 file_names = []
@@ -60,7 +78,7 @@ print "Total number of entries: ", chain.GetEntries()
 counter = 0.0
 
 #To speed up runtime 3e+3 instead of 1e+11, i.e. only load the first 3000 events.
-for iev in range(int( min(3e+3, chain.GetEntries()))):
+for iev in range(int( min(2e+4, chain.GetEntries()))):
     chain.GetEntry(iev)
     ev = chain
     if iev%500 == 0:
@@ -89,10 +107,15 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
         continue
 
     #Discard events where only one jet was produced (Is this unphysical? Or what's the problem? LC1LT seems to always be singular in that case)
-    if ev.nJet == 1 & print_discriminating_reasons:
-        print "Only one jet in event ", iev
+    if ev.nJet == 1:
+        if print_discriminating_reasons:
+            print "Only one jet in event ", iev
         continue
 
+#    if ev.nJet == 2:
+#        if print_discriminating_reasons:
+#            print "Only two jets in event ", iev
+#        continue
     # For each event we want to build three matrices, A (model matrix), V (covariance matrix) & L (constraint matrix)
     #
     # The model matrix A. This matrix tells us in what way the measured values and the estimated values are related. It is defined by
@@ -234,7 +257,8 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
     F = C_inv - np.dot(C_inv,np.dot(L_tr,np.dot(LC1LT1_inv,np.dot(L, C_inv))))
     G = np.dot(LC1LT1_inv,np.dot(L,C_inv))
     H = -1.0*LC1LT1_inv
-    
+
+    #Theta are the estimated values for the jet pts
     Theta = np.dot(np.dot(F, np.dot(A_tr,V_inv)),jet_pts) + np.dot(np.transpose(G),R)
 
     Lorentzvectors = []
@@ -258,22 +282,22 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
     print "py = ", py
     print " "
 
-    estimates = []
-    measurements = []
+    estimat = []
+    measure = []
     for i in xrange(len(ev.hJidx)):
-        estimates.append(Theta[0,ev.hJidx[i]])
-        measurements.append(jet_pts[ev.hJidx[i]])
+        estimat.append(Theta[0,ev.hJidx[i]])
+        measure.append(jet_pts[ev.hJidx[i]])
 
-    print "Estimates :", estimates
-    print "Measured values :", measurements
+    print "Estimates for Higgs PTs:", estimat
+    print "Measured values for Higgs PTs:", measure
 
-    if any(x < 0.0 for x in estimates):
+    if any(x < 0.0 for x in estimat):
         print "ESTIMATED VALUE NEGATIVE!"
 
     Higgs_lorentz = []
     for i in xrange(len(ev.hJidx)):
         v = ROOT.TLorentzVector()
-        v.SetPtEtaPhiM(estimates[i], jet_etas[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
+        v.SetPtEtaPhiM(estimat[i], jet_etas[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
         Higgs_lorentz.append(v)
     
     higgs_vector = ROOT.TLorentzVector()
@@ -293,8 +317,43 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
     print "Estimated Higgs mass: ", higgs_vector.M()
     print "Measured Higgs mass: ", higgs_vector_m.M()
     counter += 1
+
+    for i in xrange(ev.nJet):
+        if Theta[0,i] < 0:
+            print "theta : ",Theta[0,:]
+            print "measurements: ",jet_pts
+            print "etas: ", jet_etas
+            phis = []
+            for j in xrange(ev.nJet):
+                phis.append(ev.Jet_phi[j])
+            print "phis: ", phis
+            print "V_phi: ", ev.V_phi
+            print "V_pt: ", ev.V_pt
+            #ha = raw_input( "Found negative Jet PT" )
+
+    print Theta.shape
+    print ev.nJet
+    print Theta[0,ev.nJet-1]
+    nJet[0] = ev.nJet
+    est_mass[0] = higgs_vector.M()
+    mea_mass[0] = higgs_vector_m.M()
     
+    for jet in xrange(ev.nJet):
+        estimates[jet] = Theta[0,jet]
+        measurements[jet] = ev.Jet_pt[jet]
+        etas[jet] = ev.Jet_eta[jet]        
+        if jet in ev.hJidx:
+            higgs_tag[jet] = 1
+        else:
+            higgs_tag[jet] = 0
+    print estimates
+    print measurements
+    print etas
+    print higgs_tag
+    tree.Fill()
+
 print "We found ",counter, " fitting events"    
 
 out.cd()
+tree.Write("", ROOT.TObject.kOverwrite)
 out.Close()

@@ -28,8 +28,8 @@ Saved_Fits = ROOT.TFile( 'Egen_to_Ereco_fits.root', 'RECREATE')
 Saved_Fits.cd()
 
 eta_directories = []
-no_fits = 15
-interval_width = 10
+no_fits = 76
+interval_width = 5
 fit_params = np.zeros((no_fits,2,3,len(regions)))
 
 for region in range(len(regions)):
@@ -48,7 +48,7 @@ for region in range(len(regions)):
 
         for i in xrange(no_fits):
             #Initialize Interval in which Gaussian Fit will be made
-            interval = [(i+2)*interval_width, (i+3)*interval_width]
+            interval = [(i+4)*interval_width, (i+5)*interval_width]
 
             #Create the strings that limit the data to the range of the Eta & RecoPt intervals & to the current Hadron Flavour
 
@@ -62,9 +62,9 @@ for region in range(len(regions)):
             string2.append(str(interval[0]))
             string2.append(' && RecoPt < ')
             string2.append(str(interval[1]))
-            string2.append(' && RecoEta > ')
+            string2.append(' && abs(RecoEta) > ')
             string2.append(str(regions[region][0]))
-            string2.append(' && RecoEta < ')
+            string2.append(' && abs(RecoEta) < ')
             string2.append(str(regions[region][1]))
             string2.append(' && GenFlavour == ')
             string2.append(str(flavour))
