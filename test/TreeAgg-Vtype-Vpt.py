@@ -3,6 +3,8 @@ import ROOT
 import numpy as np
 from numpy.linalg import inv
 
+print_discriminating_reasons = False
+
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
 out = ROOT.TFile("ChiSquareFits.root", "UPDATE")
 address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
@@ -66,12 +68,14 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
 
     #Discard all entries w Vtype not equal to either 0 or 1. (1: V -> e+e- / e-v_e, 0: V -> mumu / mu v_mu )
     if (ev.Vtype != 0) & (ev.Vtype != 1):
-        print "VType neither 0 or 1 in event ", str(iev), " Vtype = ", str(ev.Vtype) 
+        if print_discriminating_reasons:
+            print "VType neither 0 or 1 in event ", str(iev), " Vtype = ", str(ev.Vtype) 
         continue
 
     #Discard all entries w Vectorboson Momentum smaller than 50 GeV
     if ev.V_pt < 50:
-        print "V_pt < 50 in event ", str(iev), " V_pt = ", str(ev.V_pt)
+        if print_discriminating_reasons:
+            print "V_pt < 50 in event ", str(iev), " V_pt = ", str(ev.V_pt)
         continue
 
     #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4 or hadronFlavour != 5
@@ -80,11 +84,12 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
         if (ev.Jet_pt[ev.hJidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJidx[H_jets]] < -2.4) or (ev.Jet_hadronFlavour[ev.hJidx[H_jets]] != 5):
             higgs_bools.append(True)
     if any(higgs_bools):
-        print "Higgs jet w pt < 20, |eta| > 2.4 or Flavour != 5 in event ", str(iev)
+        if print_discriminating_reasons:
+            print "Higgs jet w pt < 20, |eta| > 2.4 or Flavour != 5 in event ", str(iev)
         continue
 
     #Discard events where only one jet was produced (Is this unphysical? Or what's the problem? LC1LT seems to always be singular in that case)
-    if ev.nJet == 1:
+    if ev.nJet == 1 & print_discriminating_reasons:
         print "Only one jet in event ", iev
         continue
 
@@ -132,7 +137,8 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
 
     #If any of the flavours of the jets are not 0 or 5, go to the next event. This is because sigmas were only fitted for Flavour = 0 or Flavour = 5
     if any(x not in [0,5] for x in jet_flavours):
-        print "Jet w Flavour not in [0,5] in event " , str(iev)
+        if print_discriminating_reasons:
+            print "Jet w Flavour not in [0,5] in event " , str(iev)
         continue
         
     regions = np.zeros(ev.nJet)
@@ -148,8 +154,10 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
         else: 
             regions[jets] = 99
     if any(x == 99 for x in regions):
-        print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
+        if print_discriminating_reasons:
+            print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
+
 
     histo_strings = []
     for jets in xrange(len(regions)):
@@ -185,10 +193,6 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
     # L is a 2 x nJet matrix, w. the first row containing the sines of the Jet_phis, the second row containing the cosines of the Jet_phis
 
     Lorentzvectors = []
-#    for i in xrange(len(ev.hJidx)):
-#        v = ROOT.TLorentzVector()
-#        v.SetPtEtaPhiM(ev.Jet_pt[ev.hJidx[i]], ev.Jet_eta[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
-       # Lorentzvectors.append(v)
     for i in xrange(ev.nJet):
         v = ROOT.TLorentzVector()
         v.SetPtEtaPhiM(ev.Jet_pt[i], ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
@@ -198,38 +202,9 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
     lepton_vector.SetPtEtaPhiM(ev.V_pt, ev.V_eta, ev.V_phi, ev.V_mass)
     Lorentzvectors.append(lepton_vector)
 
-    print ev.Jet_phi[0], "phi"
-    print Lorentzvectors[0][0]
-    print Lorentzvectors[0].Px(), "Px"
-    print Lorentzvectors[0].Py(), "Py"
-    print Lorentzvectors[0].Py() - np.sin(ev.Jet_phi[0])*ev.Jet_pt[0]
-    print Lorentzvectors[0].Px() - np.cos(ev.Jet_phi[0])*ev.Jet_pt[0]
-
-    Px = 0.0
-    Py = 0.0
-    Pz = 0.0
-    E = 0.0
-
-    for i in xrange(len(Lorentzvectors)):
-        Px += Lorentzvectors[i].Px()
-        Py += Lorentzvectors[i].Py()
-        Pz += Lorentzvectors[i].Pz()
-        E += Lorentzvectors[i].E()
-    
-    should_be_zero_vector = []
-    should_be_zero_vector.append(Px)
-    should_be_zero_vector.append(Py)
-    should_be_zero_vector.append(Pz)
-    should_be_zero_vector.append(E)
-
-    print "Should be zero vector in first three entries: ",should_be_zero_vector
-
     R = np.zeros(2)
-    if ev.V_phi > 0:
-        R[0] = -np.cos(ev.V_phi)*ev.V_pt
-        R[1] = -np.sin(ev.V_phi)*ev.V_pt
-    R[0] = lepton_vector.Px()
-    R[1] = lepton_vector.Py()
+    R[0] = -lepton_vector.Px()
+    R[1] = -lepton_vector.Py()
 
     jet_phis = np.zeros(ev.nJet)
     for i in xrange(ev.nJet):
@@ -262,22 +237,64 @@ for iev in range(int( min(3e+3, chain.GetEntries()))):
     
     Theta = np.dot(np.dot(F, np.dot(A_tr,V_inv)),jet_pts) + np.dot(np.transpose(G),R)
 
+    Lorentzvectors = []
+    for i in xrange(ev.nJet):
+        v = ROOT.TLorentzVector()
+        v.SetPtEtaPhiM(Theta[0,i],ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
+        Lorentzvectors.append(v)
+    Lorentzvectors.append(lepton_vector)
+    px = 0.0
+    py = 0.0
+
+    for i in xrange(len(Lorentzvectors)):
+        px += Lorentzvectors[i].Px()
+        py += Lorentzvectors[i].Py()
+    print "--------------------------------------------"
+    print " "
+    print "Fitted jets in event ", iev
+    print "Is pT conservation satisfied?"
+    print " "
+    print "px = ", px
+    print "py = ", py
+    print " "
+
     estimates = []
     measurements = []
     for i in xrange(len(ev.hJidx)):
         estimates.append(Theta[0,ev.hJidx[i]])
         measurements.append(jet_pts[ev.hJidx[i]])
+
     print "Estimates :", estimates
     print "Measured values :", measurements
 
+    if any(x < 0.0 for x in estimates):
+        print "ESTIMATED VALUE NEGATIVE!"
+
+    Higgs_lorentz = []
+    for i in xrange(len(ev.hJidx)):
+        v = ROOT.TLorentzVector()
+        v.SetPtEtaPhiM(estimates[i], jet_etas[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
+        Higgs_lorentz.append(v)
+    
+    higgs_vector = ROOT.TLorentzVector()
+    for i in xrange(len(Higgs_lorentz)):
+        higgs_vector += Higgs_lorentz[i]
+
+    Higgs_measured = []
+    for i in xrange(len(ev.hJidx)):
+        v = ROOT.TLorentzVector()
+        v.SetPtEtaPhiM(jet_pts[ev.hJidx[i]], jet_etas[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
+        Higgs_measured.append(v)
+
+    higgs_vector_m = ROOT.TLorentzVector()
+    for i in xrange(len(Higgs_measured)):
+        higgs_vector_m += Higgs_measured[i]
+
+    print "Estimated Higgs mass: ", higgs_vector.M()
+    print "Measured Higgs mass: ", higgs_vector_m.M()
     counter += 1
     
 print "We found ",counter, " fitting events"    
-a = raw_input("We did it boys")
+
 out.cd()
-tree.Print()
-tree.Scan("GenPt")
-tree.Scan("nJet")
-tree.Scan("hJidx")
-tree.Write("", ROOT.TObject.kOverwrite)
 out.Close()
