@@ -5,6 +5,77 @@ from numpy.linalg import inv
 
 print_discriminating_reasons = False
 
+# Opening RootFile containing the Sigmas Fits
+RootFile = ROOT.TFile("Sigmas_Fits.root")
+
+#Later in the code we will need to create three matrices to solve the Lagrangian system, A (model matrix), V (covariance matrix) & L (constraints matrix)
+#Since these matrices will have to be built in each iteration of the loop over events a function is defined for each matrix which can be called inside the loop
+
+def A_matrix(a,b, nJet, event):
+    diagonal = np.zeros(nJet)
+    for jets in xrange(nJet):
+        diagonal[jets] = a
+    A = np.diag(diagonal)
+    return A
+
+def V_matrix(regions, nJet, jet_pts, jet_etas, jet_flavours, SigmasFile, event):
+
+    histo_strings = []
+    for jet in xrange(len(regions)):
+        string = "Sigmas_" + str(int(regions[jet])) + "_" + str(int(jet_flavours[jet]))
+        histo_strings.append(string)
+
+    jet_sigmas = np.zeros(nJet)
+    for jet in xrange(len(jet_sigmas)):
+        SigmasFile.cd()
+        current_histo = ROOT.gDirectory.Get(histo_strings[jet])
+        myfunc = current_histo.GetFunction("sigma_func")
+        
+        jet_sigmas[jet] = myfunc.Eval(jet_pts[jet])
+
+    diagonal = np.zeros(nJet)
+    for jet in xrange(nJet):
+        diagonal[jet] = jet_sigmas[jet]**2
+    
+    V = np.diag(diagonal)
+
+    return V
+
+def L_matrix_and_R_vector(nJet, jet_pts, V_pt, V_eta, V_phi, V_mass, jet_phis, jet_mass, jet_etas, event):
+    
+    Lorentzvectors = []
+    for jet in xrange(nJet):
+        v = ROOT.TLorentzVector()
+        v.SetPtEtaPhiM(jet_pts[jet], jet_etas[jet], jet_phis[jet], jet_mass[jet])
+        Lorentzvectors.append(v)
+
+    lepton_vector = ROOT.TLorentzVector()
+    lepton_vector.SetPtEtaPhiM(V_pt, V_eta, V_phi, V_mass)
+
+    R = np.zeros(2)
+    R[0] = -lepton_vector.Px()
+    R[1] = -lepton_vector.Py()
+
+    L = np.matrix([np.cos(jet_phis), np.sin(jet_phis)])
+
+    return L, R
+
+def LagrangianSolver(A, L, V,  R, jet_pts):
+    A_tr = np.transpose(A)
+    V_inv = inv(V)
+    L_tr = np.transpose(L)
+
+    C = np.dot(A_tr, np.dot(V_inv,A))
+    C_inv = inv(C)
+
+    LC1LT1 = np.dot(L, np.dot(C_inv, L_tr))
+    LC1LT1_inv = inv(LC1LT1)
+    F = C_inv - np.dot(C_inv, np.dot (L_tr, np.dot(LC1LT1_inv, np.dot(L, C_inv))))
+    G = np.dot(LC1LT1_inv, np.dot(L,C_inv))
+    H = -1.0*LC1LT1_inv
+
+    return np.dot(np.dot(F,np.dot(A_tr,V_inv)), jet_pts) + np.dot(np.transpose(G),R)
+
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
 out = ROOT.TFile("ChiSquareFits.root", "UPDATE")
 address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
@@ -74,11 +145,10 @@ chain.SetBranchStatus("V_phi", True)
 
 print "Total number of entries: ", chain.GetEntries()
 
-#Initialize counter that conts the number of events for which fitted jet energies were calculated and the event was not discarded.
-counter = 0.0
+no_fitted_events = 0.0
 
 #To speed up runtime 3e+3 instead of 1e+11, i.e. only load the first 3000 events.
-for iev in range(int( min(2e+4, chain.GetEntries()))):
+for iev in range(int( min(5e+3, chain.GetEntries()))):
     chain.GetEntry(iev)
     ev = chain
     if iev%500 == 0:
@@ -112,67 +182,37 @@ for iev in range(int( min(2e+4, chain.GetEntries()))):
             print "Only one jet in event ", iev
         continue
 
-#    if ev.nJet == 2:
-#        if print_discriminating_reasons:
-#            print "Only two jets in event ", iev
-#        continue
-    # For each event we want to build three matrices, A (model matrix), V (covariance matrix) & L (constraint matrix)
-    #
-    # The model matrix A. This matrix tells us in what way the measured values and the estimated values are related. It is defined by
-    # Y = A*Theta + epsilon where
-    # Y: measured values
-    # Theta: values we want to estimate
-    # epsilon: offset
-    #
-    # in this case we assume a linear detector, i.e. Y = a*Theta + b with a being a scalar and b being a vector filled w the scalar b.
-    # The dimension of this matrix is n x n where n is the number of jets we want to estimate (i.e. nJet)
-    
+##### Building matrices & solving Lagrangian system #####
+
     a = 1.0
     b = 0.0
-    diagonal = np.zeros(ev.nJet)
-    for jets in xrange((ev.nJet)):
-        diagonal[jets] = a
-    A = np.diag(diagonal)
+
+    A = A_matrix(a,b, ev.nJet, iev)
+
     if np.linalg.matrix_rank(A) != A.shape[0]:
         print "Matrix A is not of full rank in event ", iev
         continue
 
-    # The second matrix is the covariance matrix. In our case this matrix is simply a diagonal matrix w. the variances squared as entries
-    # V = diag(sigma^2(E_1),..,sigma^2(E_nJet))
-    # To get these sigmas we use the root file Sigmas_Fit.root where there are histograms w. a plot of sigma as a function of the Energy for different
-    # eta regions and hadronFlavours. For each event we thus extract Eta, hadronFlavour & the energies of the jets and then fill a diagonal matrix
-    # w the fit from the root file.
     # eta0: abs(eta) in [0.0,1.0]
     # eta1: abs(eta) in [1.0,1.5]
     # eta2: abs(eta) in [1.5,2.0]
     # eta3: abs(eta) in [2.0,2.5]
 
-    jet_pts = np.zeros(ev.nJet)
-    jet_sigmas = np.zeros(ev.nJet)
-    jet_etas = np.zeros(ev.nJet)
-    jet_flavours = np.zeros(ev.nJet)
-    jet_region = np.zeros(ev.nJet)
-
-    for jets in xrange(ev.nJet):
-        jet_etas[jets] = ev.Jet_eta[jets]
-        jet_flavours[jets] = ev.Jet_hadronFlavour[jets]
-        jet_pts[jets] = ev.Jet_pt[jets]
-
     #If any of the flavours of the jets are not 0 or 5, go to the next event. This is because sigmas were only fitted for Flavour = 0 or Flavour = 5
-    if any(x not in [0,5] for x in jet_flavours):
+    if any(x not in [0,5] for x in ev.Jet_hadronFlavour):
         if print_discriminating_reasons:
             print "Jet w Flavour not in [0,5] in event " , str(iev)
         continue
         
     regions = np.zeros(ev.nJet)
-    for jets in xrange(len(jet_etas)):
-        if (np.absolute(jet_etas[jets]) > 0.0 and np.absolute(jet_etas[jets]) < 1.0):
+    for jets in xrange(ev.nJet):
+        if (np.absolute(ev.Jet_eta[jets]) > 0.0 and np.absolute(ev.Jet_eta[jets]) < 1.0):
             regions[jets] = 0
-        elif (np.absolute(jet_etas[jets]) > 1.0 and np.absolute(jet_etas[jets]) < 1.5):
+        elif (np.absolute(ev.Jet_eta[jets]) > 1.0 and np.absolute(ev.Jet_eta[jets]) < 1.5):
             regions[jets] = 1
-        elif (np.absolute(jet_etas[jets]) > 1.5 and np.absolute(jet_etas[jets]) < 2.0):
+        elif (np.absolute(ev.Jet_eta[jets]) > 1.5 and np.absolute(ev.Jet_eta[jets]) < 2.0):
             regions[jets] = 2
-        elif (np.absolute(jet_etas[jets]) > 2.0 and np.absolute(jet_etas[jets]) < 2.5):
+        elif (np.absolute(ev.Jet_eta[jets]) > 2.0 and np.absolute(ev.Jet_eta[jets]) < 2.5):
             regions[jets] = 3
         else: 
             regions[jets] = 99
@@ -181,92 +221,29 @@ for iev in range(int( min(2e+4, chain.GetEntries()))):
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
 
-
-    histo_strings = []
-    for jets in xrange(len(regions)):
-
-        string = []
-        string.append("Sigmas_")
-        string.append(str(int(regions[jets])))
-        string.append("_")
-        string.append(str(int(jet_flavours[jets])))
-        string = "".join(string)
-        histo_strings.append(string)
-
-    for jets in xrange(len(jet_sigmas)):
-
-        RootFile = ROOT.TFile("Sigmas_Fits.root")
-        RootFile.cd()
-
-        current_histo = ROOT.gDirectory.Get(histo_strings[jets])
-        myfunc = current_histo.GetFunction("sigma_func")
-
-        jet_sigmas[jets] = myfunc.Eval(ev.Jet_pt[jets])
-
-    diagonal = np.zeros(ev.nJet)
-    for jets in xrange((ev.nJet)):
-        diagonal[jets] = jet_sigmas[jets]**2
-    V = np.diag(diagonal)
+    V = V_matrix(regions, ev.nJet, ev.Jet_pt, ev.Jet_eta, ev.Jet_hadronFlavour, RootFile, iev)
     if np.linalg.matrix_rank(V) !=V.shape[0]:
         print "Matrix V is singular in event ", iev
         continue
 
-    # The last matrix we need to build is the matrix L coming from the constraints, defined by L dot Theta = R (Theta being the vector containing the measurements)
     # R = [(- cos (V_phi) * V_pt),(-sin(V_phi)* V_pt)]
     # L is a 2 x nJet matrix, w. the first row containing the sines of the Jet_phis, the second row containing the cosines of the Jet_phis
 
-    Lorentzvectors = []
-    for i in xrange(ev.nJet):
-        v = ROOT.TLorentzVector()
-        v.SetPtEtaPhiM(ev.Jet_pt[i], ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
-        Lorentzvectors.append(v)
-
-    lepton_vector = ROOT.TLorentzVector()
-    lepton_vector.SetPtEtaPhiM(ev.V_pt, ev.V_eta, ev.V_phi, ev.V_mass)
-    Lorentzvectors.append(lepton_vector)
-
-    R = np.zeros(2)
-    R[0] = -lepton_vector.Px()
-    R[1] = -lepton_vector.Py()
-
-    jet_phis = np.zeros(ev.nJet)
-    for i in xrange(ev.nJet):
-        jet_phis[i] = ev.Jet_phi[i]
-
-    L = np.matrix([np.cos(jet_phis), np.sin(jet_phis)])
- 
+    L, R = L_matrix_and_R_vector(ev.nJet, ev.Jet_pt, ev.V_pt, ev.V_eta, ev.V_phi, ev.V_mass, ev.Jet_phi, ev.Jet_mass, ev.Jet_eta, iev)
         
-   # The only thing left to do is calculate the various matrix products.
-
-    A_tr = np.transpose(A)
-    V_inv = inv(V)
-    L_tr = np.transpose(L)
-
-    C = np.dot(A_tr, np.dot(V_inv, A))
-    if np.linalg.matrix_rank(C) !=C.shape[0]:
-        print "C matrix not of full rank in event ", iev
-        continue
-    C_inv = inv(C)
-    
-    LC1LT1 = np.dot(L,np.dot(C_inv, L_tr))
-    if np.linalg.matrix_rank(LC1LT1) != LC1LT1.shape[0]:
-        print "LC1LT1 matrix not of full rank in event ", iev
-        continue
-
-    LC1LT1_inv = inv(LC1LT1)
-    F = C_inv - np.dot(C_inv,np.dot(L_tr,np.dot(LC1LT1_inv,np.dot(L, C_inv))))
-    G = np.dot(LC1LT1_inv,np.dot(L,C_inv))
-    H = -1.0*LC1LT1_inv
-
     #Theta are the estimated values for the jet pts
-    Theta = np.dot(np.dot(F, np.dot(A_tr,V_inv)),jet_pts) + np.dot(np.transpose(G),R)
+    Theta = LagrangianSolver(A, L, V, R, ev.Jet_pt)
 
+    
     Lorentzvectors = []
     for i in xrange(ev.nJet):
         v = ROOT.TLorentzVector()
         v.SetPtEtaPhiM(Theta[0,i],ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
         Lorentzvectors.append(v)
+    lepton_vector = ROOT.TLorentzVector()
+    lepton_vector.SetPtEtaPhiM(ev.V_pt, ev.V_eta, ev.V_phi, ev.V_mass)
     Lorentzvectors.append(lepton_vector)
+    
     px = 0.0
     py = 0.0
 
@@ -286,7 +263,7 @@ for iev in range(int( min(2e+4, chain.GetEntries()))):
     measure = []
     for i in xrange(len(ev.hJidx)):
         estimat.append(Theta[0,ev.hJidx[i]])
-        measure.append(jet_pts[ev.hJidx[i]])
+        measure.append(ev.Jet_pt[ev.hJidx[i]])
 
     print "Estimates for Higgs PTs:", estimat
     print "Measured values for Higgs PTs:", measure
@@ -294,46 +271,37 @@ for iev in range(int( min(2e+4, chain.GetEntries()))):
     if any(x < 0.0 for x in estimat):
         print "ESTIMATED VALUE NEGATIVE!"
 
-    Higgs_lorentz = []
-    for i in xrange(len(ev.hJidx)):
-        v = ROOT.TLorentzVector()
-        v.SetPtEtaPhiM(estimat[i], jet_etas[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
-        Higgs_lorentz.append(v)
-    
-    higgs_vector = ROOT.TLorentzVector()
-    for i in xrange(len(Higgs_lorentz)):
-        higgs_vector += Higgs_lorentz[i]
-
-    Higgs_measured = []
-    for i in xrange(len(ev.hJidx)):
-        v = ROOT.TLorentzVector()
-        v.SetPtEtaPhiM(jet_pts[ev.hJidx[i]], jet_etas[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
-        Higgs_measured.append(v)
-
     higgs_vector_m = ROOT.TLorentzVector()
-    for i in xrange(len(Higgs_measured)):
-        higgs_vector_m += Higgs_measured[i]
+    higgs_vector = ROOT.TLorentzVector()
+    for i in xrange(len(ev.hJidx)):
+        v = ROOT.TLorentzVector()
+
+        v.SetPtEtaPhiM(estimat[i], ev.Jet_eta[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
+        higgs_vector += v
+    
+        v.SetPtEtaPhiM(ev.Jet_pt[ev.hJidx[i]], ev.Jet_eta[ev.hJidx[i]], ev.Jet_phi[ev.hJidx[i]], ev.Jet_mass[ev.hJidx[i]])
+        higgs_vector_m += v
 
     print "Estimated Higgs mass: ", higgs_vector.M()
     print "Measured Higgs mass: ", higgs_vector_m.M()
-    counter += 1
+    no_fitted_events += 1
 
     for i in xrange(ev.nJet):
         if Theta[0,i] < 0:
-            print "theta : ",Theta[0,:]
-            print "measurements: ",jet_pts
-            print "etas: ", jet_etas
-            phis = []
+            phi_display = []
+            pt_display = []
+            eta_display = []
             for j in xrange(ev.nJet):
-                phis.append(ev.Jet_phi[j])
-            print "phis: ", phis
+                phi_display.append(ev.Jet_phi[j])
+                pt_display.append(ev.Jet_pt[j])
+                eta_display.append(ev.Jet_eta[j])
+            print "theta : ",Theta[0,:]
+            print "measurements: ", pt_display
+            print "etas: ", eta_display
+            print "phis: ", phi_display
             print "V_phi: ", ev.V_phi
             print "V_pt: ", ev.V_pt
-            #ha = raw_input( "Found negative Jet PT" )
 
-    print Theta.shape
-    print ev.nJet
-    print Theta[0,ev.nJet-1]
     nJet[0] = ev.nJet
     est_mass[0] = higgs_vector.M()
     mea_mass[0] = higgs_vector_m.M()
@@ -346,13 +314,10 @@ for iev in range(int( min(2e+4, chain.GetEntries()))):
             higgs_tag[jet] = 1
         else:
             higgs_tag[jet] = 0
-    print estimates
-    print measurements
-    print etas
-    print higgs_tag
+
     tree.Fill()
 
-print "We found ",counter, " fitting events"    
+print "We found ",no_fitted_events, " fitting events"    
 
 out.cd()
 tree.Write("", ROOT.TObject.kOverwrite)
