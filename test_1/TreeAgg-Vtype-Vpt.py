@@ -10,14 +10,20 @@ RootFile = ROOT.TFile("Sigmas_Fits.root")
 #Later in the code we will need to create three matrices to solve the Lagrangian system, A (model matrix), V (covariance matrix) & L (constraints matrix)
 #Since these matrices will have to be built in each iteration of the loop over events a function is defined for each matrix which can be called inside the loop
 
-def create_cut_permutations(Theta):
+def create_cut_permutations(Theta, higgs_indices):
+    no_higgs_jets = sum(higgs_indices)
     result = []
     for i in xrange(len(Theta)):
         idx = []
+        cur_higgs = []
         for j in xrange(len(Theta)):
             if j != i:
+                cur_higgs.append(higgs_indices[j])
                 idx.append(j)
-        result.append(idx)
+        if sum(cur_higgs) == no_higgs_jets:
+            result.append(idx)
+    if len(result) < 1:
+        return [0]
     return result
 
 def ChiSquare(V, estimated_pt, original_pt):
@@ -27,8 +33,11 @@ def ChiSquare(V, estimated_pt, original_pt):
         res += ((estimated_pt[idx] - original_pt[idx])**2)/(V_diag[idx])
     return res
 
-def find_minimal_array(Theta, original_pt, V):
-    idx_list = create_cut_permutations(np.arange(len(Theta)))
+def find_minimal_array(Theta, original_pt, V, higgs_indices):
+    
+    idx_list = create_cut_permutations(np.arange(len(Theta)), higgs_indices)
+    if idx_list == [0]:
+        return [0]
     first_V = V[np.ix_(idx_list[0], idx_list[0])]
     min_chi = ChiSquare(first_V, [Theta[i] for i in idx_list[0]], [original_pt[i] for i in idx_list[0]])
     best_index = idx_list[0]
@@ -310,7 +319,7 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
         
         contains_negativevalue = False
 
-        best_indices = find_minimal_array(Theta[0,:].tolist()[0], ev.Jet_pt, V) 
+        best_indices = find_minimal_array(Theta[0,:].tolist()[0], ev.Jet_pt, V, higgs_indices) 
    
         new_theta_scope = [Theta[0,idx] for idx in best_indices]
         new_regions_scope = [regions[idx] for idx in best_indices]
@@ -337,22 +346,19 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             if Theta[0,i] < 0:
                 contains_negativevalue = True
 
-        #If this is the last iteration of the loop, fill up the global variables
-        if contains_negativevalue == False:
-            new_etas = new_etas_scope
-            new_phis = new_phis_scope
-            new_masses = new_masses_scope
-            final_indices = best_indices
-            higgs_indices = higgs_indices_scope
+        #Save results to variables defined before the loop
+        new_etas = new_etas_scope
+        new_phis = new_phis_scope
+        new_masses = new_masses_scope
+        final_indices = best_indices
+        higgs_indices = higgs_indices_scope
 
         iteration_counter += 1
 
     for pt in Theta[0,:].tolist()[0]:
         if pt < 0:
             still_negative_value_left = True
-    if still_negative_value_left or continue_or_not == 1.0:
-        #Save Higgs_mass_estimated = 0
-        continue
+            
     Lorentzvectors = []
     for i in xrange(len(Theta[0,:].tolist()[0])):
         v = ROOT.TLorentzVector()
@@ -374,9 +380,9 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
 #    print "px_before = ", px
 #    print "py_before = ", py
 #    print " "
-#    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original pts"
-#    print Theta_before, "Theta before iteration"
-#    print Theta, "Theta after iteration"
+    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original pts"
+    print Theta_before, "Theta before iteration"
+    print Theta, "Theta after iteration"
 #    print " "
     px = 0.0
     py = 0.0
@@ -405,35 +411,41 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             cur_v.SetPtEtaPhiM(Theta[0,i], new_etas[i], new_phis[i], new_masses[i])
             higgs_vector += cur_v
 
-#    print addup.M(), "Estimated Higgs -mass after first estimation"
-#    print "Estimated Higgs mass: ", higgs_vector.M()
-#    print "Measured Higgs mass: ", higgs_vector_m.M()
-
-    if sum(higgs_indices) < 2.0:
-        continue
-
+    print addup.M(), "Estimated Higgs mass after first estimation"
+    print "Estimated Higgs mass: ", higgs_vector.M()
+    print "Measured Higgs mass: ", higgs_vector_m.M()
+    print len(final_indices), "nJet after it"
+    print final_indices, "final indices"
     no_fitted_events += 1
 
     #Fill up the output tree with the results and some metadata
     nJet[0] = ev.nJet
     nJet_after_it[0] = len(final_indices)
-    est_mass[0] = higgs_vector.M()
     mea_mass[0] = higgs_vector_m.M()
-    Chisquare[0] = ChiSquare(V, Theta[0,:].tolist()[0], [ev.Jet_pt[i] for i in final_indices])
 
-    for i in xrange(nJet_after_it):
-        estimates[i] = Theta[0,i]      
-        higgs_tag[i] = higgs_indices[i]
+    if continue_or_not == 1.0 or still_negative_value_left or sum(higgs_indices) < 2:
+        Chisquare[0] = 0.0
+        est_mass[0] = 0.0
+        for i in xrange(nJet_after_it):
+            estimates[i] = 0.0
+            higgs_tag[i] = higgs_indices[i]
+        
+    else:
+        Chisquare[0] = ChiSquare(V, Theta[0,:].tolist()[0], [ev.Jet_pt[i] for i in final_indices])
+        est_mass[0] = higgs_vector.M()
 
+        for i in xrange(nJet_after_it):
+            estimates[i] = Theta[0,i]
+            higgs_tag[i] = higgs_indices[i]
+  
     for jet in xrange(ev.nJet):
         measurements[jet] = ev.Jet_pt[jet]
         etas[jet] = ev.Jet_eta[jet]  
 
-#    print '--------------------------------------------------'
+    print '--------------------------------------------------'
     tree.Fill()
 
 print "We found ",no_fitted_events, " fitting events"    
-
 out.cd()
 tree.Write("", ROOT.TObject.kOverwrite)
 out.Close()
