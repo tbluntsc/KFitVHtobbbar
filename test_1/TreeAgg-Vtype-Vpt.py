@@ -5,7 +5,7 @@ from numpy.linalg import inv
 print_discriminating_reasons = False
 
 #Opening RootFile containing the Sigmas Fits
-RootFile = ROOT.TFile("Sigmas_Fits.root")
+RootFile = ROOT.TFile("Sigmas_Fits_NeutrinoAdded_full_onlyFlavour5.root")
 
 #Later in the code we will need to create three matrices to solve the Lagrangian system, A (model matrix), V (covariance matrix) & L (constraints matrix)
 #Since these matrices will have to be built in each iteration of the loop over events a function is defined for each matrix which can be called inside the loop
@@ -116,7 +116,7 @@ def LagrangianSolver(A, L, V,  R, jet_pts):
     return np.dot(np.dot(F,np.dot(A_tr,V_inv)), jet_pts) + np.dot(np.transpose(G),R)
 
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
-out = ROOT.TFile("ChiSquareFits.root", "UPDATE")
+out = ROOT.TFile("Smalltest.root", "UPDATE")
 address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
 
 #Create an empty Tree 
@@ -145,7 +145,7 @@ tree.Branch('mea_mass', mea_mass, "mea_mass/D")
 tree.Branch('Chisquare', Chisquare, "Chisquare/D")
 
 #Create array w. strings corresponding to tree names (i.e. tree_1.root, tree_2.root etc.)
-no_of_files = 10
+no_of_files = 25
 file_names = []
 for i in range(1, no_of_files+1):
     file_names.append("tree_"+str(i)+".root")
@@ -180,13 +180,14 @@ chain.SetBranchStatus("hJidx", True)
 chain.SetBranchStatus("V_phi", True)
 chain.SetBranchStatus("V_eta", True)
 chain.SetBranchStatus("V_mass", True)
+chain.SetBranchStatus("hJCidx", True)
 
 print "Total number of entries: ", chain.GetEntries()
 
 no_fitted_events = 0.0
 
 #To speed up runtime 3e+3 instead of 1e+11, i.e. only load the first 3000 events.
-for iev in range(int( min(1e+5, chain.GetEntries()))):
+for iev in range(int( min(1e+11, chain.GetEntries()))):
     chain.GetEntry(iev)
     ev = chain
     if iev%500 == 0:
@@ -204,20 +205,27 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             print "V_pt < 50 in event ", str(iev), " V_pt = ", str(ev.V_pt)
         continue
 
-    #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4 or hadronFlavour != 5
+    #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
     higgs_bools = []
     for H_jets in xrange(len(ev.hJidx)):
-        if (ev.Jet_pt[ev.hJidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJidx[H_jets]] < -2.4) or (ev.Jet_hadronFlavour[ev.hJidx[H_jets]] != 5):
+        if (ev.Jet_pt[ev.hJidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJidx[H_jets]] != 5:
             higgs_bools.append(True)
     if any(higgs_bools):
         if print_discriminating_reasons:
-            print "Higgs jet w pt < 20, |eta| > 2.4 or Flavour != 5 in event ", str(iev)
+            print "Higgs jet w pt < 20 or |eta| > 2.4 in event ", str(iev)
         continue
 
     #Discard events where only one jet was produced (Is this unphysical? Or what's the problem? LC1LT seems to always be singular in that case)
     if ev.nJet == 1:
         if print_discriminating_reasons:
             print "Only one jet in event ", iev
+        continue
+
+    bla = 0.0
+    for jets in xrange(ev.nJet):
+        if ev.Jet_hadronFlavour[jets] not in [0,5]:
+            bla = 1.0
+    if bla == 1.0:
         continue
 
 ##### Building matrices & solving Lagrangian system #####
@@ -236,12 +244,14 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
     # eta2: abs(eta) in [1.5,2.0]
     # eta3: abs(eta) in [2.0,2.5]
 
-    #If any of the flavours of the jets are not 0 or 5, go to the next event. This is because sigmas were only fitted for Flavour = 0 or Flavour = 5
-    if any(x not in [0,5] for x in ev.Jet_hadronFlavour):
-        if print_discriminating_reasons:
-            print "Jet w Flavour not in [0,5] in event " , str(iev)
-        continue
-        
+    #Assign flavours to the jets. Higgs jets-> 5, else: 0
+    Flavours = np.zeros(ev.nJet)
+    
+    for idx in ev.hJCidx:
+        Flavours[idx] = 5
+    
+    Flavours = ev.Jet_hadronFlavour
+
     regions = np.zeros(ev.nJet)
     for jets in xrange(ev.nJet):
         if (np.absolute(ev.Jet_eta[jets]) > 0.0 and np.absolute(ev.Jet_eta[jets]) < 1.0):
@@ -259,7 +269,7 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
 
-    V = V_matrix(regions, ev.nJet, ev.Jet_pt, ev.Jet_eta, ev.Jet_hadronFlavour, RootFile)
+    V = V_matrix(regions, ev.nJet, ev.Jet_pt, ev.Jet_eta, Flavours, RootFile)
     if np.linalg.matrix_rank(V) !=V.shape[0]:
         print "Matrix V is singular in event ", iev
         continue
@@ -324,7 +334,7 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
         new_theta_scope = [Theta[0,idx] for idx in best_indices]
         new_regions_scope = [regions[idx] for idx in best_indices]
         new_etas_scope = [ev.Jet_eta[idx] for idx in best_indices]
-        new_flavours_scope = [ev.Jet_hadronFlavour[idx] for idx in best_indices]
+        new_flavours_scope = [Flavours[idx] for idx in best_indices]
         new_masses_scope = [ev.Jet_mass[idx] for idx in best_indices]
         new_phis_scope = [ev.Jet_phi[idx] for idx in best_indices] 
         higgs_indices_scope = [higgs_indices[idx] for idx in best_indices]
@@ -380,9 +390,9 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
 #    print "px_before = ", px
 #    print "py_before = ", py
 #    print " "
-    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original pts"
-    print Theta_before, "Theta before iteration"
-    print Theta, "Theta after iteration"
+#    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original pts"
+#    print Theta_before, "Theta before iteration"
+#    print Theta, "Theta after iteration"
 #    print " "
     px = 0.0
     py = 0.0
@@ -411,11 +421,11 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             cur_v.SetPtEtaPhiM(Theta[0,i], new_etas[i], new_phis[i], new_masses[i])
             higgs_vector += cur_v
 
-    print addup.M(), "Estimated Higgs mass after first estimation"
-    print "Estimated Higgs mass: ", higgs_vector.M()
-    print "Measured Higgs mass: ", higgs_vector_m.M()
-    print len(final_indices), "nJet after it"
-    print final_indices, "final indices"
+ #   print addup.M(), "Estimated Higgs mass after first estimation"
+ #   print "Estimated Higgs mass: ", higgs_vector.M()
+ #   print "Measured Higgs mass: ", higgs_vector_m.M()
+ #   print len(final_indices), "nJet after it"
+ #   print final_indices, "final indices"
     no_fitted_events += 1
 
     #Fill up the output tree with the results and some metadata
@@ -442,7 +452,7 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
         measurements[jet] = ev.Jet_pt[jet]
         etas[jet] = ev.Jet_eta[jet]  
 
-    print '--------------------------------------------------'
+#    print '--------------------------------------------------'
     tree.Fill()
 
 print "We found ",no_fitted_events, " fitting events"    
