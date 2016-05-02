@@ -9,7 +9,7 @@ for no_jets in [2,3,4]:
 
     histo_1 = Tree.Draw("est_mass>>h1(100, 0, 250)", "nJet ==" + str(no_jets))
     histo_2 = Tree.Draw("mea_mass>>h2(100, 0, 250)", "nJet ==" + str(no_jets))
-    histo_3 = Tree.Draw("(est_mass*(est_mass > 0) + mea_mass)/2>>h3(100, 0, 250)", "nJet ==" + str(no_jets))
+    histo_3 = Tree.Draw("(est_mass*(est_mass > 0) + 2*(est_mass == 0)*mea_mass + (est_mass > 0)*mea_mass)/2>>h3(100, 0, 250)", "nJet ==" + str(no_jets))
 
     h1 = ROOT.gDirectory.Get("h1")
     h2 = ROOT.gDirectory.Get("h2")
@@ -52,7 +52,7 @@ for no_jets in [2,3,4]:
 
 histo_4 = Tree.Draw("est_mass>>h1", "nJet > 4")
 histo_5 = Tree.Draw("mea_mass>>h2", "nJet > 4", "SAME")
-histo_6 = Tree.Draw("(est_mass+mea_mass)/2>>h3", "est_mass != 0 && nJet > 4", "SAME")
+histo_6 = Tree.Draw("(est_mass*(est_mass > 0) + 2*(est_mass == 0)*mea_mass + (est_mass > 0)*mea_mass)/2>>h3", "est_mass != 0 && nJet > 4", "SAME")
 
 h1 = ROOT.gDirectory.Get("h1")
 h2 = ROOT.gDirectory.Get("h2")
