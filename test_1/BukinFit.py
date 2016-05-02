@@ -3,8 +3,8 @@ import numpy as np
 ROOT.gSystem.Load("libRooFit")
 
 bin_number = 35
-x_boundary = 40
-y_boundary = 180
+x_boundary = 50
+y_boundary = 170
 
 labeler = 0
 some_values = []
@@ -16,7 +16,7 @@ for no_jets in ["==2","==3","==4", ">4"]:
     c1 = ROOT.TCanvas("c1", "c1", 800,800)
     leg = ROOT.TLegend(0.68, 0.65, 0.9, 0.9)
  
-    x = ROOT.RooRealVar("x-axis", "x", 75.0 , 165.0)
+    x = ROOT.RooRealVar("x-axis", "x", 80 , 160)
     Xp = ROOT.RooRealVar("Xp_sgn", "Xp",100.0 , 200.0)
     sP = ROOT.RooRealVar("sP_sgn", "sP", 0.0 , 50.0)
     xi = ROOT.RooRealVar("xi_sgn", "xi", -5.0, 5.0)
@@ -36,13 +36,8 @@ for no_jets in ["==2","==3","==4", ">4"]:
         data = ROOT.TFile('ChiSquareFits_NeutrinoAdded_Full_only_Flavour5_hJCidx.root')
         Tree = ROOT.gDirectory.Get('ChiSquareFits')
         
-        if mass == "mea_mass":
-            Tree.Draw(mass+">>h1(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets )
-        
-        if mass == "est_mass":
-            Tree.Draw(mass+">>h1(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets )
-
         if iteration_counter in [0,1]:        
+            Tree.Draw(mass+">>h1(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets )
             h1 = ROOT.gDirectory.Get("h1")
             Roo_histo_1 = ROOT.RooDataHist("higgs_mass_estimate", "estimated higgs mass",  ROOT.RooArgList(x), h1, 1.0)
             RooBukinPdf.fitTo(Roo_histo_1)
@@ -70,7 +65,7 @@ for no_jets in ["==2","==3","==4", ">4"]:
             mean_corrfac_sigma.append(corr_fac)
             
             #Calculate the factors for the superposition of the est & mea diagrams
-            overall_factor = 1.0/(1.0 / mean_corrfac_sigma[1]**2 - 2.0*corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]) + 1.0 / mean_corrfac_sigma[3]**2)
+            overall_factor = 1.0/(1.0 / mean_corrfac_sigma[1]**2 - (2.0*corr_fac)/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]) + 1.0 / mean_corrfac_sigma[3]**2)
             est_factor = (1.0/mean_corrfac_sigma[1]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
             mea_factor = (1.0/mean_corrfac_sigma[3]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
             constant = -(mean_corrfac_sigma[0] - mean_corrfac_sigma[2])*mea_factor*overall_factor
