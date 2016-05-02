@@ -3,8 +3,8 @@ import numpy as np
 ROOT.gSystem.Load("libRooFit")
 
 bin_number = 35
-x_boundary = 75
-y_boundary = 165
+x_boundary = 40
+y_boundary = 180
 
 labeler = 0
 some_values = []
@@ -52,7 +52,7 @@ for no_jets in ["==2","==3","==4", ">4"]:
         if iteration_counter == 2:
             
             #Extracting the correlation factor from the est_mass & mea_mass diagrams
-            Tree.Draw("est_mass>>est_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "est_mass < 250 && nJet" + no_jets)
+            Tree.Draw("est_mass*(est_mass > 0) + mea_mass*(est_mass == 0)>>est_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "est_mass < 250 && nJet" + no_jets)
             Tree.Draw("mea_mass>>mea_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "est_mass < 250 && nJet" + no_jets)
             est_histo = ROOT.gDirectory.Get("est_histo")
             mea_histo = ROOT.gDirectory.Get("mea_histo")
@@ -67,49 +67,25 @@ for no_jets in ["==2","==3","==4", ">4"]:
             Tree.Draw("est_mass:mea_mass>>two_dim_histo", "est_mass != 0 &&" + string_2d + " && nJet" + no_jets, "COLZ")
             two_dim_histo = ROOT.gDirectory.Get("two_dim_histo")
             corr_fac = two_dim_histo.GetCorrelationFactor()
- #           print corr_fac
-#            a = raw_input()
             mean_corrfac_sigma.append(corr_fac)
             
             #Calculate the factors for the superposition of the est & mea diagrams
-
-            overall_factor = 1.0/(mean_corrfac_sigma[1]**2 - 2.0*corr_fac*mean_corrfac_sigma[1]*mean_corrfac_sigma[3] + mean_corrfac_sigma[3]**2)
-            est_factor = (mean_corrfac_sigma[1]**2 - 2.0*corr_fac*mean_corrfac_sigma[1]*mean_corrfac_sigma[3])*overall_factor
-            mea_factor = (mean_corrfac_sigma[3]**2 - 2.0*corr_fac*mean_corrfac_sigma[1]*mean_corrfac_sigma[3])*overall_factor
-            constant = overall_factor*est_factor*(mean_corrfac_sigma[2] - mean_corrfac_sigma[0])
-#            overall_factor = 1.0/(1.0 / mean_corrfac_sigma[1]**2 + 2.0*corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]) + 1.0 / mean_corrfac_sigma[3]**2)
-#            est_factor = (1.0/mean_corrfac_sigma[1]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
-#            constant = mean_corrfac_sigma[0]/mean_corrfac_sigma[1]**2 + mean_corrfac_sigma[2]/mean_corrfac_sigma[3]**2 - (mean_corrfac_sigma[2]+mean_corrfac_sigma[0])*corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3])
-#            mea_factor = (1.0/mean_corrfac_sigma[3]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_-factor
-
+            overall_factor = 1.0/(1.0 / mean_corrfac_sigma[1]**2 - 2.0*corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]) + 1.0 / mean_corrfac_sigma[3]**2)
+            est_factor = (1.0/mean_corrfac_sigma[1]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
+            mea_factor = (1.0/mean_corrfac_sigma[3]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
+            constant = -(mean_corrfac_sigma[0] - mean_corrfac_sigma[2])*mea_factor*overall_factor
 
             est_histo.Scale(est_factor)
+            mea_histo.Scale(mea_factor)
+            est_histo.Add(mea_histo)
             no_bins = int(est_histo.GetNbinsX())
+
             for i in xrange(no_bins):
                 est_histo.AddBinContent(i, constant)
 
-            est_histo.Add(mea_histo, mea_factor)
-
             bla = ROOT.RooDataHist("higgs_mass_estimate", "Weighted superposition of est_mass & mea_mass",  ROOT.RooArgList(x), est_histo, 1.0)
-
-#            print est_factor, constant, mea_factor
-
-#            a = raw_input("Fit about to start" + str(bla.numEntries()))
-
             RooBukinPdf.fitTo(bla)
 
-#            c1 = ROOT.TCanvas("c1", "c1", 800,800)
-#            frame = x.frame()
-#            frame.SetName("frame")
-#            frame.SetTitle("Higgs mass estimate w. a Bukin function fitted to it for nJet " + no_jets)
-            
-#            RooBukinPdf.plotOn(frame)
-#            bla.plotOn(frame)
-
-#            c1.cd()
-#            frame.Draw()
-
-#            a = raw_input("We done")
             
         some_values.append(Xp.getVal())
         some_values.append(sP.getVal())
