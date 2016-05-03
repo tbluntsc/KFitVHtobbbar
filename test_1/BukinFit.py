@@ -14,7 +14,7 @@ for no_jets in ["==2","==3","==4", ">4"]:
 
     labeler += 1
     c1 = ROOT.TCanvas("c1", "c1", 800,800)
-    leg = ROOT.TLegend(0.68, 0.65, 0.9, 0.9)
+    leg = ROOT.TLegend(0.64, 0.65, 0.9, 0.9)
  
     x = ROOT.RooRealVar("x-axis", "x", 80 , 160)
     Xp = ROOT.RooRealVar("Xp_sgn", "Xp",100.0 , 200.0)
@@ -37,7 +37,8 @@ for no_jets in ["==2","==3","==4", ">4"]:
         Tree = ROOT.gDirectory.Get('ChiSquareFits')
         
         if iteration_counter in [0,1]:        
-            Tree.Draw(mass+">>h1(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets )
+#            Tree.Draw(mass+">>h1(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets )
+            Tree.Draw(mass+">>h1", "est_mass < 250 && nJet" + no_jets)
             h1 = ROOT.gDirectory.Get("h1")
             Roo_histo_1 = ROOT.RooDataHist("higgs_mass_estimate", "estimated higgs mass",  ROOT.RooArgList(x), h1, 1.0)
             RooBukinPdf.fitTo(Roo_histo_1)
@@ -47,8 +48,10 @@ for no_jets in ["==2","==3","==4", ">4"]:
         if iteration_counter == 2:
             
             #Extracting the correlation factor from the est_mass & mea_mass diagrams
-            Tree.Draw("est_mass*(est_mass > 0) + mea_mass*(est_mass == 0)>>est_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "est_mass < 250 && nJet" + no_jets)
-            Tree.Draw("mea_mass>>mea_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "est_mass < 250 && nJet" + no_jets)
+#            Tree.Draw("est_mass*(est_mass > 0) + mea_mass*(est_mass == 0)>>est_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets)
+#            Tree.Draw("mea_mass>>mea_histo(" +str(bin_number) + "," + str(x_boundary) + "," + str(y_boundary) + ")", "nJet" + no_jets)
+            Tree.Draw("est_mass*(est_mass > 0) + mea_mass*(est_mass == 0)>>est_histo", "est_mass < 250 && nJet" + no_jets)
+            Tree.Draw("mea_mass>>mea_histo", "est_mass < 250 && nJet" + no_jets)
             est_histo = ROOT.gDirectory.Get("est_histo")
             mea_histo = ROOT.gDirectory.Get("mea_histo")
         
@@ -68,17 +71,19 @@ for no_jets in ["==2","==3","==4", ">4"]:
             overall_factor = 1.0/(1.0 / mean_corrfac_sigma[1]**2 - (2.0*corr_fac)/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]) + 1.0 / mean_corrfac_sigma[3]**2)
             est_factor = (1.0/mean_corrfac_sigma[1]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
             mea_factor = (1.0/mean_corrfac_sigma[3]**2 - corr_fac/(mean_corrfac_sigma[1]*mean_corrfac_sigma[3]))*overall_factor
-            constant = -(mean_corrfac_sigma[0] - mean_corrfac_sigma[2])*mea_factor*overall_factor
+#            constant = (mean_corrfac_sigma[0] - mean_corrfac_sigma[2])*mea_factor*overall_factor
+            
+#            est_factor = 0.5
+#            mea_factor = 0.5
+            constant = 0.0
 
-            est_histo.Scale(est_factor)
-            mea_histo.Scale(mea_factor)
-            est_histo.Add(mea_histo)
-            no_bins = int(est_histo.GetNbinsX())
+            Tree.Draw("%f*est_mass + %f*mea_mass + %f>>bla"%(est_factor, mea_factor, constant), "est_mass < 250 && nJet" + no_jets)
+            test1 = ROOT.gDirectory.Get("bla")
 
-            for i in xrange(no_bins):
-                est_histo.AddBinContent(i, constant)
-
-            bla = ROOT.RooDataHist("higgs_mass_estimate", "Weighted superposition of est_mass & mea_mass",  ROOT.RooArgList(x), est_histo, 1.0)
+#            Tree.Draw("(est_mass + mea_mass)/2>>bla", "est_mass < 250")
+#            hue = ROOT.gDirectory.Get("bla")
+#            bla = ROOT.RooDataHist("higgs", "huehue", ROOT.RooArgList(x), hue, 1.0)
+            bla = ROOT.RooDataHist("higgs_mass_estimate", "Weighted superposition of est_mass & mea_mass",  ROOT.RooArgList(x), test1, 1.0)
             RooBukinPdf.fitTo(bla)
 
             
@@ -102,24 +107,22 @@ for no_jets in ["==2","==3","==4", ">4"]:
             Roo_histo_1.plotOn(frame, color)
         else:
             bla.plotOn(frame,color)
+            leg.AddEntry(frame.getCurve(mass), "est_factor = " + str(est_factor))
+            leg.AddEntry(frame.getCurve(mass), "mea_factor = " + str(mea_factor))
+            
 
         cur_mean = str(Xp.getVal())
         cur_sig = str(sP.getVal())
+        cur_unc = str(sP.getVal() / Xp.getVal())
 
         RooBukinPdf.plotOn(frame, color, name)
         leg.AddEntry(frame.getCurve(mass), mass)
         leg.AddEntry(frame.getCurve(mass), "mean = " + cur_mean)
         leg.AddEntry(frame.getCurve(mass), "sigma = " + cur_sig)
+        leg.AddEntry(frame.getCurve(mass), "rel-uncert. = " + cur_unc)
         iteration_counter += 1
 
     data.Close()
-#    ROOT.gDirectory.DeleteAll()
-#    ROOT.gDirectory.Delete("c1")
-#    ROOT.gDirectory.Delete("frame")
-#    ROOT.gDirectory.Delete("higgs_mass_estimate")
-#    ROOT.gDirectory.Delete("buk_pdf_sgn")
-#    ROOT.gDirectory.Delete("x-axis")
-
     leg.SetTextSize(0.015)
     c1.cd()
     frame.Draw()
