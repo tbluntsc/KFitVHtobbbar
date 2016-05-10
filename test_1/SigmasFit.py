@@ -5,8 +5,8 @@ import re
 pow = ROOT.TMath.Power
 sqrt = ROOT.TMath.Sqrt
 
-RootFile = ROOT.TFile('Egen_to_Ereco_fits_NeutrinosAdded_full_onlyFlavour5.root')
-SigmasFit = ROOT.TFile('Sigmas_Fits_NeutrinoAdded_full_onlyFlavour5.root', 'RECREATE')
+RootFile = ROOT.TFile('Egen_to_Ereco_fits_NeutrinosAdded_full_onlyFlavour5_Jet_pt_reg.root')
+SigmasFit = ROOT.TFile('Sigmas_Fits_NeutrinoAdded_full_onlyFlavour5_Jet_pt_reg.root', 'RECREATE')
 
 #Some shenanigans to extract the number of Eta regions and the number of fits in each region from the RootFile
 

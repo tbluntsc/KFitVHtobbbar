@@ -24,7 +24,7 @@ HadronFlavours.append(0)
 HadronFlavours.append(5)
 
 #Create ROOT File to write Fits & Histograms to, w a Subdirectory for each Eta region
-Saved_Fits = ROOT.TFile( 'Egen_to_Ereco_fits_NeutrinosAdded_full_onlyFlavour5.root', 'RECREATE')
+Saved_Fits = ROOT.TFile( 'Egen_to_Ereco_fits_NeutrinosAdded_full_onlyFlavour5_Jet_pt_reg.root', 'RECREATE')
 Saved_Fits.cd()
 
 eta_directories = []
@@ -49,18 +49,22 @@ for region in range(len(regions)):
         for i in xrange(no_fits):
             #Initialize Interval in which Gaussian Fit will be made
             interval = [(i+4)*interval_width, (i+5)*interval_width]
-
+            pt_kind = []
+            if flavour == "5":
+                pt_kind = "Jet_pt_reg"
+            else:
+                pt_kind = "RecoPt"
             #Create the strings that limit the data to the range of the Eta & RecoPt intervals & to the current Hadron Flavour
 
             string1 = []
-            string1.append('RecoPt-GenPt>>h_')
+            string1.append(pt_kind + '-GenPt>>h_')
             string1.append(str(i))
             string1 = "".join(string1)
 
             string2 = []
-            string2.append('RecoPt > ')
+            string2.append(pt_kind + ' > ')
             string2.append(str(interval[0]))
-            string2.append(' && RecoPt < ')
+            string2.append(' && ' + pt_kind + ' < ')
             string2.append(str(interval[1]))
             string2.append(' && abs(RecoEta) > ')
             string2.append(str(regions[region][0]))
