@@ -11,8 +11,10 @@ for no_jets in ["==2","==3","==4", ">4"]:
     labeler += 1
     c1 = ROOT.TCanvas("c1", "c1", 800,800)
     leg = ROOT.TLegend(0.64, 0.65, 0.9, 0.9)
- 
-    x = ROOT.RooRealVar("x-axis", "x", 60 , 170)
+#    if no_jets == "==2":
+#        x = ROOT.RooRealVar("x-axis", "x", 90 , 140)
+#    else:
+    x = ROOT.RooRealVar("x-axis", "x", 90,160)
     Xp = ROOT.RooRealVar("Xp_sgn", "Xp",100.0 , 200.0)
     sP = ROOT.RooRealVar("sP_sgn", "sP", 0.0 , 50.0)
     xi = ROOT.RooRealVar("xi_sgn", "xi", -5.0, 5.0)
@@ -29,7 +31,8 @@ for no_jets in ["==2","==3","==4", ">4"]:
 
     for mass in ["est_mass", "mea_mass", "superposition"]:
         
-        data = ROOT.TFile('ChiSquareFits_NeutrinoAdded_Full_only_Flavour5_hJCidx.root')
+#        data = ROOT.TFile('ChiSquareFits_NeutrinoAdded_Full_only_Flavour5_hJCidx.root')
+        data = ROOT.TFile('Removed_Jet_hadronFlavour_Jet_pt_reg_added.root')
         Tree = ROOT.gDirectory.Get('ChiSquareFits')
         
         if iteration_counter in [0,1]:        
@@ -100,10 +103,7 @@ for no_jets in ["==2","==3","==4", ">4"]:
             Roo_histo_1.plotOn(frame, color)
         else:
             bla.plotOn(frame,color)
-            leg.AddEntry(frame.getCurve(mass), "est_factor = " + str(est_factor))
-            leg.AddEntry(frame.getCurve(mass), "mea_factor = " + str(mea_factor))
-            leg.AddEntry(frame.getCurve(mass), "corr_factor = " + str(corr_fac))
-
+            
         cur_mean = str(Xp.getVal())
         cur_sig = str(sP.getVal())
         cur_unc = str(sP.getVal() / Xp.getVal())
@@ -113,7 +113,13 @@ for no_jets in ["==2","==3","==4", ">4"]:
         leg.AddEntry(frame.getCurve(mass), "mean = " + cur_mean)
         leg.AddEntry(frame.getCurve(mass), "sigma = " + cur_sig)
         leg.AddEntry(frame.getCurve(mass), "rel-uncert. = " + cur_unc)
+        if iteration_counter ==2:
+            leg.AddEntry(frame.getCurve(mass), "est_factor = " + str(est_factor))
+            leg.AddEntry(frame.getCurve(mass), "mea_factor = " + str(mea_factor))
+            leg.AddEntry(frame.getCurve(mass), "corr_factor = " + str(corr_fac))
+            
         iteration_counter += 1
+
 
     data.Close()
     leg.SetTextSize(0.015)

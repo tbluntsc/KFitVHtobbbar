@@ -3,7 +3,7 @@ import ROOT
 import matplotlib.pyplot as plt
 
 #Open the raw data (TTree)
-RootFile  = ROOT.TFile( 'Egen_to_Ereco_NeutrinosAdded_full_onlyFlavour5.root' )
+RootFile  = ROOT.TFile( 'V21.root' )
 Tree = ROOT.gDirectory.Get('Egen_to_Ereco')
 entries = Tree.GetEntries()
 
@@ -19,17 +19,15 @@ regions.append(eta_1)
 regions.append(eta_2)
 regions.append(eta_3)
 
-HadronFlavours = []
-HadronFlavours.append(0)
-HadronFlavours.append(5)
+HadronFlavours = [0,5]
 
 #Create ROOT File to write Fits & Histograms to, w a Subdirectory for each Eta region
-Saved_Fits = ROOT.TFile( 'Egen_to_Ereco_fits_NeutrinosAdded_full_onlyFlavour5_Jet_pt_reg.root', 'RECREATE')
+Saved_Fits = ROOT.TFile( 'V21_GaussianFits.root', 'RECREATE')
 Saved_Fits.cd()
 
 eta_directories = []
-no_fits = 36
-interval_width = 5
+no_fits = 22
+interval_width = 10
 fit_params = np.zeros((no_fits,2,3,len(regions)))
 
 for region in range(len(regions)):
@@ -48,7 +46,7 @@ for region in range(len(regions)):
 
         for i in xrange(no_fits):
             #Initialize Interval in which Gaussian Fit will be made
-            interval = [(i+4)*interval_width, (i+5)*interval_width]
+            interval = [(i+2)*interval_width, (i+3)*interval_width]
             pt_kind = []
             if flavour == "5":
                 pt_kind = "Jet_pt_reg"
@@ -56,15 +54,14 @@ for region in range(len(regions)):
                 pt_kind = "RecoPt"
             #Create the strings that limit the data to the range of the Eta & RecoPt intervals & to the current Hadron Flavour
 
-            string1 = []
-            string1.append(pt_kind + '-GenPt>>h_')
-            string1.append(str(i))
-            string1 = "".join(string1)
+            string1 = pt_kind + '/GenPt>>h_' + str(i)
 
             string2 = []
-            string2.append(pt_kind + ' > ')
+#            string2.append(pt_kind + ' > ')
+            string2.append("GenPt > ")
             string2.append(str(interval[0]))
-            string2.append(' && ' + pt_kind + ' < ')
+#            string2.append(' && ' + pt_kind + ' < ')
+            string2.append(" && GenPt < ")
             string2.append(str(interval[1]))
             string2.append(' && abs(RecoEta) > ')
             string2.append(str(regions[region][0]))
@@ -74,11 +71,8 @@ for region in range(len(regions)):
             string2.append(str(flavour))
             string2.append(' && GenPt != 0')
             string2 = "".join(string2)
-            
-            substr = []
-            substr.append('h_')
-            substr.append(str(i))
-            substr = "".join(substr)
+
+            substr = 'h_' + str(i)
     
             #Create Histogram in Histo, fit it to a Gaussian in param and write the Histogram to the root file opened in the start
             test = Tree.Draw(string1, string2)

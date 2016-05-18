@@ -5,8 +5,8 @@ import re
 pow = ROOT.TMath.Power
 sqrt = ROOT.TMath.Sqrt
 
-RootFile = ROOT.TFile('Egen_to_Ereco_fits_NeutrinosAdded_full_onlyFlavour5_Jet_pt_reg.root')
-SigmasFit = ROOT.TFile('Sigmas_Fits_NeutrinoAdded_full_onlyFlavour5_Jet_pt_reg.root', 'RECREATE')
+RootFile = ROOT.TFile('V21_GaussianFits.root')
+SigmasFit = ROOT.TFile('V21_SigmasFits.root', 'RECREATE')
 
 #Some shenanigans to extract the number of Eta regions and the number of fits in each region from the RootFile
 
@@ -81,10 +81,10 @@ for i in xrange(no_regions):
             Mean.SetBinContent(bin_number_mean, current_energy)
 
         #This Function is not known if defined at the very start of the macro. No idea why.     
-        sigma_func = ROOT.TF1("sigma_func", "sqrt( [0]*[0]*x*x  + [1]*[1]*x   + [2]*[2])",20,200)
+        sigma_func = ROOT.TF1("sigma_func", "sqrt( [0]*[0]*x*x  + [1]*[1]*x   + [2]*[2])/x",20,200)
         params = Test.Fit("sigma_func", "S")
 
-        mean_func = ROOT.TF1("mean_func", "[0]*x + [1]", 0, 200)
+        mean_func = ROOT.TF1("mean_func", "[0]/x + [1]", 0, 200)
         params_mean = Mean.Fit("mean_func", "S")
 
         c = ROOT.TCanvas()
