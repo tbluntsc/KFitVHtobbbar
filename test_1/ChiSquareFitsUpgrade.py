@@ -26,8 +26,16 @@ def cut_off_one_element(array, higgsind):
     return result
 
 def all_subarrays(nJet, higgs_indices):
-
     result = [[],[]]
+    if nJet > 9:
+        safe_result = []
+        for i in xrange(nJet):
+            safe_result.append(i)
+
+        result[0] = safe_result
+        result[1] = higgs_indices
+        return [result]
+
     iter_counter = 0
     pts_indices = np.zeros(nJet, dtype = int)
     for i in xrange(nJet):
@@ -209,7 +217,7 @@ tree.Branch('mea_mass', mea_mass, "mea_mass/D")
 tree.Branch('Chisquare', Chisquare, "Chisquare/D")
 
 #Create array w. strings corresponding to tree names (i.e. tree_1.root, tree_2.root etc.)
-no_of_files = 2
+no_of_files = 25
 file_names = []
 for i in range(1, no_of_files+1):
     file_names.append("tree_"+str(i)+".root")
@@ -251,7 +259,7 @@ print "Total number of entries: ", chain.GetEntries()
 no_fitted_events = 0.0
 
 #To speed up runtime 3e+3 instead of 1e+11, i.e. only load the first 3000 events.
-for iev in range(int( min(1e+5, chain.GetEntries()))):
+for iev in range(int( min(1e+11, chain.GetEntries()))):
     chain.GetEntry(iev)
     ev = chain
     
@@ -332,9 +340,12 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
 
+    if len(ev.hJCidx) < 2:
+        continue
+
     higgs_indices = []
     for i in xrange(ev.nJet):
-        if i in ev.hJidx:
+        if i in ev.hJCidx:
             higgs_indices.append(1)
         else:
             higgs_indices.append(0)
@@ -352,17 +363,12 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
     #Theta are the estimated values for the jet pts
     Theta = LagrangianSolver(A, L, V, R, custom_pts)
     Theta_before = Theta
-    print "-----------"
+#    print "-----------"
 #    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original PTs" 
 #    print Theta, "First estimation and its ChiSquare: ",  ChiSquare(V, Theta[0,:].tolist()[0], custom_pts)
 
     all_arrays = all_subarrays(ev.nJet, higgs_indices)
 
-    print ev.nJet, "nJet"
-    print higgs_indices, "higgs indices"
-    print [ev.hJCidx[i] for i in xrange(len(ev.hJCidx))]
-    if sum(higgs_indices) < 2:
-        continue
 
     lowest_ChiSquare = ChiSquare(V, Theta[0,:].tolist()[0], custom_pts)
     max_prob = ROOT.TMath.Prob(lowest_ChiSquare, ev.nJet)
@@ -406,14 +412,28 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
                 if iteration_prob > max_prob:
                     corresponding_result = iteration_result
                     corresponding_indices = index_arrays[0]
- #   print ">>>>>>>>>>>>>>>>>>>>>>>>>>>Below, the result<<<<<<<<<<<<<<<<<<<<<<<<<"
- #   print corresponding_result
+#    print ">>>>>>>>>>>>>>>>>>>>>>>>>>>Below, the result<<<<<<<<<<<<<<<<<<<<<<<<<"
+#    print corresponding_result
+#    print "and the original pts ", [custom_pts[i] for i in xrange(len(custom_pts))] 
  #   print corresponding_indices
  #   print "----------"
     
     new_etas = [ev.Jet_eta[i] for i in corresponding_indices]
     new_phis = [ev.Jet_phi[i] for i in corresponding_indices]
-    new_masses = [ev.Jet_mass[i] for i in corresponding_indices]
+
+#    print corresponding_indices, "indices of result"
+
+    scale_factors = np.zeros(len(corresponding_indices))
+    for i in xrange(len(scale_factors)):
+        scale_factors[i] = corresponding_result[0,i]/custom_pts[corresponding_indices[i]]
+
+    new_masses = np.zeros(len(corresponding_indices))
+    for i in xrange(len(new_masses)):
+        new_masses[i] = ev.Jet_mass[corresponding_indices[i]]*scale_factors[i]
+
+#    print [ev.Jet_mass[i] for i in corresponding_indices]
+#    print new_masses
+        
 
     Lorentzvectors_before = []
     for i in xrange(Theta_before.shape[1]):
@@ -517,9 +537,10 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
             higgs_tag[i] = higgs_indices[i]
 
 
-        else:
-            Chisquare[0] = 0.0#ChiSquare(V, corresponding_result, [custom_pts[i] for i in corresponding_indices])
-            est_mass[0] = higgs_vector.M()
+    else:
+        V = V_matrix([regions[i] for i in corresponding_indices], len(corresponding_result), corresponding_result, [ev.Jet_eta[i] for i in corresponding_indices], [Flavours[i] for i in corresponding_indices], RootFile)
+        Chisquare[0] = ChiSquare(V, corresponding_result, [custom_pts[i] for i in corresponding_indices])
+        est_mass[0] = higgs_vector.M()
 
         for i in xrange(nJet_after_it):
             estimates[i] = Theta[0,i]
@@ -528,9 +549,6 @@ for iev in range(int( min(1e+5, chain.GetEntries()))):
     for jet in xrange(ev.nJet):
         measurements[jet] = custom_pts[jet]
         etas[jet] = ev.Jet_eta[jet]  
-
-#    if ev.nJet >= 3:
-#        a = raw_input()
 
 #    print '--------------------------------------------------'
     tree.Fill()
