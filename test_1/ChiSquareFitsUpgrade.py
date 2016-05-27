@@ -5,7 +5,7 @@ from numpy.linalg import inv
 print_discriminating_reasons = False
 
 #Opening RootFile containing the Sigmas Fits
-RootFile = ROOT.TFile("V21_SigmasFits.root")
+RootFile = ROOT.TFile("V21_SigmasFits_test.root")
 
 #Later in the code we will need to create three matrices to solve the Lagrangian system, A (model matrix), V (covariance matrix) & L (constraints matrix)
 #Since these matrices will have to be built in each iteration of the loop over events a function is defined for each matrix which can be called inside the loop
@@ -141,7 +141,7 @@ def V_matrix(regions, nJet, jet_pts, jet_etas, jet_flavours, SigmasFile):
         current_histo = ROOT.gDirectory.Get(histo_strings[jet])
         myfunc = current_histo.GetFunction("sigma_func")
         
-        jet_sigmas[jet] = myfunc.Eval(jet_pts[jet])
+        jet_sigmas[jet] = myfunc.Eval(jet_pts[jet])*jet_pts[jet]
 
     diagonal = np.zeros(nJet)
     for jet in xrange(nJet):
@@ -335,6 +335,15 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
             regions[jets] = 3
         else: 
             regions[jets] = 99
+
+    for jets in xrange(ev.nJet):
+        if regions[jets] != 99:
+            histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(jet_flavours[jet]))
+            SigmasFile.cd()
+            current_histo = ROOT.gDirectory.Get(histo_string)
+            myfunc = current_histo.GetFunction("mean_func")
+            custom_pts[jet] = custom_pts[jet] - (1.0 - myfunc.Eval(custom_pts[jet]))*custom_pts[jet]
+
     if any(x == 99 for x in regions):
         if print_discriminating_reasons:
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas

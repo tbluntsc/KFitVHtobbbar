@@ -22,12 +22,12 @@ regions.append(eta_3)
 HadronFlavours = [0,5]
 
 #Create ROOT File to write Fits & Histograms to, w a Subdirectory for each Eta region
-Saved_Fits = ROOT.TFile( 'V21_GaussianFits.root', 'RECREATE')
+Saved_Fits = ROOT.TFile( 'V21_GaussianFits_test.root', 'RECREATE')
 Saved_Fits.cd()
 
 eta_directories = []
-no_fits = 22
-interval_width = 10
+no_fits = 153
+interval_width = 5
 fit_params = np.zeros((no_fits,2,3,len(regions)))
 
 for region in range(len(regions)):
@@ -46,7 +46,7 @@ for region in range(len(regions)):
 
         for i in xrange(no_fits):
             #Initialize Interval in which Gaussian Fit will be made
-            interval = [(i+2)*interval_width, (i+3)*interval_width]
+            interval = [((1.0/4.0)*i+6)*interval_width, ((1.0/4.0)*i+7)*interval_width]
             pt_kind = []
             if flavour == "5":
                 pt_kind = "Jet_pt_reg"
@@ -54,14 +54,14 @@ for region in range(len(regions)):
                 pt_kind = "RecoPt"
             #Create the strings that limit the data to the range of the Eta & RecoPt intervals & to the current Hadron Flavour
 
-            string1 = pt_kind + '/GenPt>>h_' + str(i)
+            string1 = 'GenPt/' + pt_kind +'>>h_' + str(i)
 
             string2 = []
-#            string2.append(pt_kind + ' > ')
-            string2.append("GenPt > ")
+            string2.append(pt_kind + ' > ')
+#            string2.append("GenPt > ")
             string2.append(str(interval[0]))
-#            string2.append(' && ' + pt_kind + ' < ')
-            string2.append(" && GenPt < ")
+            string2.append(' && ' + pt_kind + ' < ')
+#            string2.append(" && GenPt < ")
             string2.append(str(interval[1]))
             string2.append(' && abs(RecoEta) > ')
             string2.append(str(regions[region][0]))
@@ -81,12 +81,15 @@ for region in range(len(regions)):
             #Fit gaussian only between Mean +- FWHM of the histogram instead of the whole histogram
             first = Histo.FindFirstBinAbove(Histo.GetMaximum()/2)
             last = Histo.FindLastBinAbove(Histo.GetMaximum()/2)
-            fwhm = Histo.GetBinCenter(last) - Histo.GetBinCenter(first)
+            fwhm = (Histo.GetBinCenter(last) - Histo.GetBinCenter(first))
             mean = Histo.GetMean()
 
-            gaus_range = ROOT.TF1("gaus_range", "gaus", mean-fwhm, mean+fwhm)
+#            mean = 1.0
+#            fwhm = 0.15
 
-            param = Histo.Fit("gaus_range", "S")
+            gaus_range = ROOT.TF1("gaus_range", "gaus", mean-fwhm, mean+fwhm)
+            param = Histo.Fit("gaus_range", "R")
+
             Histo.Write()
 
         #Go back to the current Eta Directory

@@ -32,7 +32,8 @@ for no_jets in ["==2","==3","==4", ">4"]:
     for mass in ["est_mass", "mea_mass", "superposition"]:
         
 #        data = ROOT.TFile('ChiSquareFits_NeutrinoAdded_Full_only_Flavour5_hJCidx.root')
-        data = ROOT.TFile('Removed_Jet_hadronFlavour_Jet_pt_reg_added.root')
+#        data = ROOT.TFile('Removed_Jet_hadronFlavour_Jet_pt_reg_added.root')
+        data = ROOT.TFile('V21_ChiSquareFitsUpgrade.root')
         Tree = ROOT.gDirectory.Get('ChiSquareFits')
         
         if iteration_counter in [0,1]:        

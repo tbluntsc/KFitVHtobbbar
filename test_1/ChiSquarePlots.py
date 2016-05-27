@@ -2,8 +2,11 @@ import numpy as np
 import ROOT
 
 ROOT.gStyle.SetOptStat(0)
-RootFile = ROOT.TFile("ChiSquareFits_NeutrinoAdded_Full_only_Flavour5_hJCidx.root")
+#RootFile = ROOT.TFile("ChiSquareFits_NeutrinoAdded_Full_only_Flavour5_hJCidx.root")
+#RootFile = ROOT.TFile("Removed_Jet_hadronFlavour_Jet_pt_reg_added.root")
+RootFile = ROOT.TFile("V21_ChiSquareFits.root")
 Tree = ROOT.gDirectory.Get('ChiSquareFits')
+efficiencies = []
 
 for no_jets in [2,3,4]:
 
@@ -23,6 +26,8 @@ for no_jets in [2,3,4]:
     no_bins_1 = h1.GetNbinsX()
     no_bins_2 = h2.GetNbinsX()
     no_bins_3 = h3.GetNbinsX()
+
+    efficiencies.append(h1.GetBinContent(1)/h1.Integral())
 
     h1.AddBinContent(no_bins_1, h1.GetBinContent(no_bins_1+1))
     h2.AddBinContent(no_bins_2, h2.GetBinContent(no_bins_2+1))
@@ -57,6 +62,11 @@ histo_6 = Tree.Draw("(est_mass*(est_mass > 0) + 2*(est_mass == 0)*mea_mass + (es
 h1 = ROOT.gDirectory.Get("h1")
 h2 = ROOT.gDirectory.Get("h2")
 h3 = ROOT.gDirectory.Get("h3")
+
+efficiencies.append(h1.GetBinContent(1)/h1.Integral())
+
+print efficiencies
+a = raw_input()
 
 h1.SetTitle("nJet > 4")
 h2.SetTitle("nJet > 4")

@@ -5,8 +5,8 @@ import re
 pow = ROOT.TMath.Power
 sqrt = ROOT.TMath.Sqrt
 
-RootFile = ROOT.TFile('V21_GaussianFits.root')
-SigmasFit = ROOT.TFile('V21_SigmasFits.root', 'RECREATE')
+RootFile = ROOT.TFile('V21_GaussianFits_test.root')
+SigmasFit = ROOT.TFile('V21_SigmasFits_test.root', 'RECREATE')
 
 #Some shenanigans to extract the number of Eta regions and the number of fits in each region from the RootFile
 
@@ -56,9 +56,11 @@ for i in xrange(no_regions):
     current_eta_dir = RootFile.GetDirectory("eta"+str(i))
     for flavour in [0,5]:
         current_eta_dir.cd("Flavour"+str(flavour))
-        Test = ROOT.TH1F("Sigmas_"+str(i)+"_"+str(flavour), "Fitted Sigma values for |Eta| in ["+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour) , no_fits, 2.0*interval_width , (no_fits+2)*(interval_width))
-        Mean = ROOT.TH1F("Mean_"+str(i)+"_"+str(flavour), "Fitted Mean values for |Eta| in "+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour), no_fits, 2.0*interval_width, (no_fits+2)*(interval_width))
+        Test = ROOT.TH1F("Sigmas_"+str(i)+"_"+str(flavour), "Fitted Sigma values for |Eta| in ["+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour) , no_fits, 6.0*interval_width , (no_fits+7)*(interval_width)/4.0)
+        Mean = ROOT.TH1F("Mean_"+str(i)+"_"+str(flavour), "Fitted Mean values for |Eta| in ["+str(regions[i][0])+","+str(regions[i][1])+"]" +" and HadronFlavour == "+str(flavour), no_fits, (6.0)*interval_width, (no_fits+7)*(interval_width)/4.0)
 
+        Mean.SetMaximum(1.15)
+        Mean.SetMinimum(0.85)
         Test.SetMarkerSize(3)
         Test.SetMarkerStyle(5)
         Mean.SetMarkerSize(3)
@@ -72,20 +74,20 @@ for i in xrange(no_regions):
             #Parameter 1 and 2 correspond to the position and the width of the Gaussian fit
             current_sigma = myfunc.GetParameter(2)
             current_energy = myfunc.GetParameter(1)
+#            current_energy = Histo.GetMean()
 
             #Find bin with value of position of the Gaussian and write Gaussian width to it
-            pos = ((fit+2)*interval_width + (fit+3)*interval_width)/2.0
+            pos = (((1.0/4.0)*fit+6)*interval_width + ((1.0/4.0)*fit+7)*interval_width)/2.0
             bin_number = Test.FindBin(pos)
             bin_number_mean = Mean.FindBin(pos)
             Test.SetBinContent(bin_number, current_sigma)
             Mean.SetBinContent(bin_number_mean, current_energy)
 
         #This Function is not known if defined at the very start of the macro. No idea why.     
-        sigma_func = ROOT.TF1("sigma_func", "sqrt( [0]*[0]*x*x  + [1]*[1]*x   + [2]*[2])/x",20,200)
-        params = Test.Fit("sigma_func", "S")
-
-        mean_func = ROOT.TF1("mean_func", "[0]/x + [1]", 0, 200)
-        params_mean = Mean.Fit("mean_func", "S")
+        sigma_func = ROOT.TF1("sigma_func", "sqrt( [0]*[0]*x  + [1]*[1] + [2]*[2]*x*x)/x",40,200)
+        params = Test.Fit("sigma_func", "R")
+        mean_func = ROOT.TF1("mean_func", "[0]/x + [1] + [2]*x", 40, 200)
+        params_mean = Mean.Fit("mean_func", "R")
 
         c = ROOT.TCanvas()
         Test.SetOption("P")
