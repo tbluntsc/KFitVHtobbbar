@@ -270,6 +270,15 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
 
+    for jets in xrange(ev.nJet):
+
+        histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(Flavours[jets]))
+        RootFile.cd()
+        current_histo = ROOT.gDirectory.Get(histo_string)
+        myfunc = current_histo.GetFunction("mean_func")
+        custom_pts[jets] = custom_pts[jets] + (1.0 - myfunc.Eval(custom_pts[jets]))*custom_pts[jets]
+
+
     V = V_matrix(regions, ev.nJet, custom_pts, ev.Jet_eta, Flavours, RootFile)
     if np.linalg.matrix_rank(V) !=V.shape[0]:
         print "Matrix V is singular in event ", iev
@@ -370,6 +379,14 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         if pt < 0:
             still_negative_value_left = True
             
+    scale_factors = np.zeros(len(final_indices))
+    for i in xrange(len(scale_factors)):
+        scale_factors[i] = Theta[0,i]/custom_pts[final_indices[i]]
+
+    new_masses = np.zeros(len(final_indices))
+    for i in xrange(len(new_masses)):
+        new_masses[i] = ev.Jet_mass[final_indices[i]]*scale_factors[i]
+
     Lorentzvectors = []
     for i in xrange(len(Theta[0,:].tolist()[0])):
         v = ROOT.TLorentzVector()
