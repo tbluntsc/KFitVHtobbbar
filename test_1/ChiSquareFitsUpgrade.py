@@ -271,6 +271,10 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     if iev%500 == 0:
         print "Processing event ", iev+1
 
+    #There can't be less than 2 Higgs jets
+    if len(ev.hJCidx) < 2:
+        continue
+
     #Discard all entries w Vtype not equal to either 0 or 1. (1: V -> e+e- / e-v_e, 0: V -> mumu / mu v_mu )
     if (ev.Vtype != 0) & (ev.Vtype != 1):
         if print_discriminating_reasons:
@@ -285,8 +289,8 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
     #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
     higgs_bools = []
-    for H_jets in xrange(len(ev.hJidx)):
-        if (custom_pts[ev.hJidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJidx[H_jets]] != 5:
+    for H_jets in xrange(len(ev.hJCidx)):
+        if (custom_pts[ev.hJCidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJCidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJCidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJCidx[H_jets]] != 5:
             higgs_bools.append(True)
     if any(higgs_bools):
         if print_discriminating_reasons:
@@ -349,8 +353,16 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         myfunc = current_histo.GetFunction("mean_func")
         custom_pts[jets] = custom_pts[jets] + (1.0 - myfunc.Eval(custom_pts[jets]))*custom_pts[jets]
 
-    if len(ev.hJCidx) < 2:
-        continue
+    #Initialize vectors where Higgs jets will be saved. Already save mea_mass to file
+    higgs_vector_m = ROOT.TLorentzVector()
+    higgs_vector = ROOT.TLorentzVector()
+    
+    for idx in ev.hJCidx:
+        cur_v = ROOT.TLorentzVector()
+        cur_v.SetPtEtaPhiM(custom_pts[idx], ev.Jet_eta[idx], ev.Jet_phi[idx], ev.Jet_mass[idx])
+        higgs_vector_m += cur_v
+
+    mea_mass[0] = higgs_vector_m.M()
 
     higgs_indices = []
     for i in xrange(ev.nJet):
@@ -455,7 +467,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     Lorentzvectors_before.append(lepton_vector)
 
     higgs_vector_before = []
-    for i in ev.hJidx:
+    for i in ev.hJCidx:
         v = ROOT.TLorentzVector()
         v.SetPtEtaPhiM(Theta[0,i], ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
         higgs_vector_before.append(v)
@@ -512,14 +524,6 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         print still_negative_value_left
         print " "
         
-    higgs_vector_m = ROOT.TLorentzVector()
-    higgs_vector = ROOT.TLorentzVector()
-    
-    for idx in ev.hJidx:
-        cur_v = ROOT.TLorentzVector()
-        cur_v.SetPtEtaPhiM(custom_pts[idx], ev.Jet_eta[idx], ev.Jet_phi[idx], ev.Jet_mass[idx])
-        higgs_vector_m += cur_v
-
     for i in xrange(len(corresponding_indices)):
         cur_v = ROOT.TLorentzVector()
         if higgs_indices[corresponding_indices[i]] == 1:
@@ -536,7 +540,6 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     #Fill up the output tree with the results and some metadata
     nJet[0] = ev.nJet
     nJet_after_it[0] = len(corresponding_indices)
-    mea_mass[0] = higgs_vector_m.M()
 
     if still_negative_value_left:
         Chisquare[0] = 0.0
