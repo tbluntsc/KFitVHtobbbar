@@ -5,7 +5,7 @@ from numpy.linalg import inv
 print_discriminating_reasons = False
 
 #Opening RootFile containing the Sigmas Fits
-RootFile = ROOT.TFile("V21_SigmasFits_test.root")
+RootFile = ROOT.TFile("V21_SigmasFits_fixedNames.root")
 
 #Later in the code we will need to create three matrices to solve the Lagrangian system, A (model matrix), V (covariance matrix) & L (constraints matrix)
 #Since these matrices will have to be built in each iteration of the loop over events a function is defined for each matrix which can be called inside the loop
@@ -187,7 +187,7 @@ def LagrangianSolver(A, L, V,  R, jet_pts):
     return np.dot(np.dot(F,np.dot(A_tr,V_inv)), jet_pts) + np.dot(np.transpose(G),R)
 
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
-out = ROOT.TFile("V21_ChiSquareFitsUpgrade.root", "UPDATE")
+out = ROOT.TFile("V21_ChiSquareFitsUpgrade_fixedNames_noMeansCorrection.root", "UPDATE")
 #address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
 address = "root://188.184.38.46:1094//store/group/phys_higgs/hbb/ntuples/V21/user/arizzi/VHBBHeppyV21/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V21_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160316_150654/0000/"
 
@@ -336,18 +336,18 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         else: 
             regions[jets] = 99
 
-    for jets in xrange(ev.nJet):
-        if regions[jets] != 99:
-            histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(jet_flavours[jet]))
-            SigmasFile.cd()
-            current_histo = ROOT.gDirectory.Get(histo_string)
-            myfunc = current_histo.GetFunction("mean_func")
-            custom_pts[jet] = custom_pts[jet] - (1.0 - myfunc.Eval(custom_pts[jet]))*custom_pts[jet]
-
     if any(x == 99 for x in regions):
         if print_discriminating_reasons:
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
+    
+#    for jets in xrange(ev.nJet):
+#
+#        histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(Flavours[jets]))
+#        RootFile.cd()
+#        current_histo = ROOT.gDirectory.Get(histo_string)
+#        myfunc = current_histo.GetFunction("mean_func")
+#        custom_pts[jets] = custom_pts[jets] + (1.0 - myfunc.Eval(custom_pts[jets]))*custom_pts[jets]
 
     if len(ev.hJCidx) < 2:
         continue
