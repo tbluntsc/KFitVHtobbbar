@@ -116,7 +116,7 @@ def LagrangianSolver(A, L, V,  R, jet_pts):
     return np.dot(np.dot(F,np.dot(A_tr,V_inv)), jet_pts) + np.dot(np.transpose(G),R)
 
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
-out = ROOT.TFile("V21_ChiSquareFits_fixedNames.root", "UPDATE")
+out = ROOT.TFile("V21_ChiSquareFits_hJidx.root", "UPDATE")
 #address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
 address = "root://188.184.38.46:1094//store/group/phys_higgs/hbb/ntuples/V21/user/arizzi/VHBBHeppyV21/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V21_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160316_150654/0000/"
 
@@ -132,6 +132,7 @@ etas = np.zeros(maxJet, dtype = np.float64())
 higgs_tag = np.zeros(maxJet, dtype = np.float64())
 est_mass = np.zeros(1, dtype = np.float64())
 mea_mass = np.zeros(1, dtype = np.float64())
+mea_mass_reg = np.zeros(1, dtype = np.float64())
 Chisquare = np.zeros(1, dtype = np.float64())
 nJet_after_it = np.zeros(1, dtype = int)
 
@@ -143,6 +144,7 @@ tree.Branch('etas', etas, "etas[nJet]/D")
 tree.Branch('higgs_tag', higgs_tag, "higgs_tag[nJet_after_it]/D")
 tree.Branch('est_mass', est_mass, "est_mass/D")
 tree.Branch('mea_mass', mea_mass, "mea_mass/D")
+tree.Branch('mea_mass_reg', mea_mass_reg, "mea_mass_reg/D")
 tree.Branch('Chisquare', Chisquare, "Chisquare/D")
 
 #Create array w. strings corresponding to tree names (i.e. tree_1.root, tree_2.root etc.)
@@ -191,17 +193,18 @@ no_fitted_events = 0.0
 for iev in range(int( min(1e+11, chain.GetEntries()))):
     chain.GetEntry(iev)
     ev = chain
-    
-    #We wanna use Jet_pt_reg for Higgs jets (which we assume to be B-flavoured) and regular Jet_pt for the rest. 
-    custom_pts = ev.Jet_pt
-    for idx in ev.hJCidx:
-        custom_pts[idx] = ev.Jet_pt_reg[idx]
 
     if iev%500 == 0:
         print "Processing event ", iev+1
 
+    #Discard events where only one jet was produced
+    if ev.nJet == 1:
+        if print_discriminating_reasons:
+            print "Only one jet in event ", iev
+        continue
+
     #There can't be any less than 2 Higgs jets
-    if len(ev.hJCidx) < 2:
+    if len(ev.hJidx) < 2:
         continue
 
     #Discard all entries w Vtype not equal to either 0 or 1. (1: V -> e+e- / e-v_e, 0: V -> mumu / mu v_mu )
@@ -216,45 +219,10 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
             print "V_pt < 50 in event ", str(iev), " V_pt = ", str(ev.V_pt)
         continue
 
-    #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
-    higgs_bools = []
-    for H_jets in xrange(len(ev.hJCidx)):
-        if (custom_pts[ev.hJCidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJCidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJCidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJCidx[H_jets]] != 5:
-            higgs_bools.append(True)
-    if any(higgs_bools):
-        if print_discriminating_reasons:
-            print "Higgs jet w pt < 20 or |eta| > 2.4 in event ", str(iev)
-        continue
-
-    #Discard events where only one jet was produced (Is this unphysical? Or what's the problem? LC1LT seems to always be singular in that case)
-    if ev.nJet == 1:
-        if print_discriminating_reasons:
-            print "Only one jet in event ", iev
-        continue
-
-##### Building matrices & solving Lagrangian system #####
-
-    a = 1.0
-    b = 0.0
-
-    A = A_matrix(a,b, ev.nJet)
-
-    if np.linalg.matrix_rank(A) != A.shape[0]:
-        print "Matrix A is not of full rank in event ", iev
-        continue
-
     # eta0: abs(eta) in [0.0,1.0]
     # eta1: abs(eta) in [1.0,1.5]
     # eta2: abs(eta) in [1.5,2.0]
     # eta3: abs(eta) in [2.0,2.5]
-
-    #Assign flavours to the jets. Higgs jets-> 5, else: 0
-    Flavours = np.zeros(ev.nJet)
-    
-    for idx in ev.hJCidx:
-        Flavours[idx] = 5
-    
-#    Flavours = ev.Jet_hadronFlavour
 
     regions = np.zeros(ev.nJet)
     for jets in xrange(ev.nJet):
@@ -274,24 +242,63 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
             print "Jet w Eta not in any of the 4 regions in event ", str(iev), regions, jet_etas
         continue
 
+
+    #Initialize Lorentzvectros where Higgs vectors are gonna be saved in. mea_mass can already be saved to the tree
+    higgs_vector_m = ROOT.TLorentzVector()
+    higgs_vector_m_reg = ROOT.TLorentzVector()
+    higgs_vector = ROOT.TLorentzVector()
+    
+    for idx in ev.hJidx:
+        cur_v = ROOT.TLorentzVector()
+        cur_v.SetPtEtaPhiM(ev.Jet_pt[idx], ev.Jet_eta[idx], ev.Jet_phi[idx], ev.Jet_mass[idx])
+        higgs_vector_m += cur_v
+
+        cur_v = ROOT.TLorentzVector()
+        cur_v.SetPtEtaPhiM(ev.Jet_pt_reg[idx], ev.Jet_eta[idx], ev.Jet_phi[idx], ev.Jet_mass[idx])
+        higgs_vector_m_reg += cur_v
+
+    mea_mass[0] = higgs_vector_m.M()
+    mea_mass_reg[0] = higgs_vector_m_reg.M()
+
+    #We wanna use Jet_pt_reg for Higgs jets (which we assume to be B-flavoured) and regular Jet_pt for the rest. 
+    custom_pts = ev.Jet_pt
+    for idx in ev.hJidx:
+        custom_pts[idx] = ev.Jet_pt_reg[idx]
+
+    #Assign flavours to the jets. Higgs jets-> 5, else: 0
+    Flavours = np.zeros(ev.nJet)
+    for idx in ev.hJidx:
+        Flavours[idx] = 5
+
+    #Normalize jet_pts to mean 1.00
     for jets in xrange(ev.nJet):
 
         histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(Flavours[jets]))
         RootFile.cd()
         current_histo = ROOT.gDirectory.Get(histo_string)
         myfunc = current_histo.GetFunction("mean_func")
-        custom_pts[jets] = custom_pts[jets] + (1.0 - myfunc.Eval(custom_pts[jets]))*custom_pts[jets]
+        custom_pts[jets] = custom_pts[jets]/(myfunc.Eval(custom_pts[jets]))
 
-    #Initialize Lorentzvectros where Higgs vectors are gonna be saved in. mea_mass can already be saved to the tree
-    higgs_vector_m = ROOT.TLorentzVector()
-    higgs_vector = ROOT.TLorentzVector()
-    
-    for idx in ev.hJCidx:
-        cur_v = ROOT.TLorentzVector()
-        cur_v.SetPtEtaPhiM(custom_pts[idx], ev.Jet_eta[idx], ev.Jet_phi[idx], ev.Jet_mass[idx])
-        higgs_vector_m += cur_v
+    #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
+    higgs_bools = []
+    for H_jets in xrange(len(ev.hJidx)):
+        if (custom_pts[ev.hJidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJidx[H_jets]] != 5:
+            higgs_bools.append(True)
+    if any(higgs_bools):
+        if print_discriminating_reasons:
+            print "Higgs jet w pt < 20 or |eta| > 2.4 in event ", str(iev)
+        continue
 
-    mea_mass[0] = higgs_vector_m.M()
+##### Building matrices & solving Lagrangian system #####
+
+    a = 1.0
+    b = 0.0
+
+    A = A_matrix(a,b, ev.nJet)
+
+    if np.linalg.matrix_rank(A) != A.shape[0]:
+        print "Matrix A is not of full rank in event ", iev
+        continue
 
     V = V_matrix(regions, ev.nJet, custom_pts, ev.Jet_eta, Flavours, RootFile)
     if np.linalg.matrix_rank(V) !=V.shape[0]:
@@ -308,6 +315,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
     Theta_before = Theta
 
+    #Save the estimation before cutting of happens
     Lorentzvectors_before = []
     for i in xrange(Theta_before.shape[1]):
         v = ROOT.TLorentzVector()
@@ -319,7 +327,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     Lorentzvectors_before.append(lepton_vector)
 
     higgs_vector_before = []
-    for i in ev.hJCidx:
+    for i in ev.hJidx:
         v = ROOT.TLorentzVector()
         v.SetPtEtaPhiM(Theta[0,i], ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
         higgs_vector_before.append(v)
@@ -340,7 +348,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     final_indices = np.arange(ev.nJet)
 
     for i in xrange(ev.nJet):
-        if i in ev.hJCidx:
+        if i in ev.hJidx:
             higgs_indices.append(1)
         else: 
             higgs_indices.append(0)
@@ -416,30 +424,28 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     for vector in Lorentzvectors_before:
         px += vector.Px()
         py += vector.Py()
-#    print " "
-#    print "Is pT conservation satisfied before iteration?"
-#    print " "
-#    print "px_before = ", px
-#    print "py_before = ", py
-#    print " "
-#    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original pts"
-#    print Theta_before, "Theta before iteration"
-#    print Theta, "Theta after iteration"
-#    print " "
+   # print " "
+   # print "Is pT conservation satisfied before iteration?"
+   # print " "
+   # print "px_before = ", px
+   # print "py_before = ", py
+   # print " "
+   # print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original pts"
+   # print Theta_before, "Theta before iteration"
+   # print Theta, "Theta after iteration"
+   # print " "
     px = 0.0
     py = 0.0
 
     for i in xrange(len(Lorentzvectors)):
         px += Lorentzvectors[i].Px()
         py += Lorentzvectors[i].Py()
-#    print " "
-#    print "Is pT conservation satisfied after iteration process?"
-#    print " "
-    if (px > 0.001 or py > 0.001) and still_negative_value_left == False :
-        print "px_afterwards = ", px
-        print "py_afterwards = ", py
-        print still_negative_value_left
-        print " "
+   # print " "
+   # print "Is pT conservation satisfied after iteration process?"
+   # print " "
+   # print "px_afterwards = ", px
+   # print "py_afterwards = ", py
+   # print " "
 
     for i in xrange(len(higgs_indices)):
         cur_v = ROOT.TLorentzVector()
@@ -447,11 +453,12 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
             cur_v.SetPtEtaPhiM(Theta[0,i], new_etas[i], new_phis[i], new_masses[i])
             higgs_vector += cur_v
 
- #   print addup.M(), "Estimated Higgs mass after first estimation"
- #   print "Estimated Higgs mass: ", higgs_vector.M()
- #   print "Measured Higgs mass: ", higgs_vector_m.M()
- #   print len(final_indices), "nJet after it"
+   # print addup.M(), "Estimated Higgs mass after first estimation"
+   # print "Estimated Higgs mass: ", higgs_vector.M()
+   # print "Measured Higgs mass: ", higgs_vector_m.M()
+  #  print len(final_indices), "nJet after it"
  #   print final_indices, "final indices"
+ 
     no_fitted_events += 1
 
     #Fill up the output tree with the results and some metadata
