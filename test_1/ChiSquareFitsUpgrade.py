@@ -141,6 +141,10 @@ def V_matrix(regions, nJet, jet_pts, jet_etas, jet_flavours, SigmasFile):
         current_histo = ROOT.gDirectory.Get(histo_strings[jet])
         myfunc = current_histo.GetFunction("sigma_func")
         
+        cur_sigma = myfunc.Eval(jet_pts[jet])
+        if (cur_sigma < 0.00000001) & (cur_sigma > -0.00000001):
+            cur_sigma = 0.001
+
         jet_sigmas[jet] = myfunc.Eval(jet_pts[jet])*jet_pts[jet]
 
     diagonal = np.zeros(nJet)
@@ -187,7 +191,7 @@ def LagrangianSolver(A, L, V,  R, jet_pts):
     return np.dot(np.dot(F,np.dot(A_tr,V_inv)), jet_pts) + np.dot(np.transpose(G),R)
 
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
-out = ROOT.TFile("V21_ChiSquareFitsUpgrade_hJidx.root", "UPDATE")
+out = ROOT.TFile("Current_Root_Files/V21_ChiSquareFitsUpgrade_hJCidx.root", "UPDATE")
 #address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
 address = "root://188.184.38.46:1094//store/group/phys_higgs/hbb/ntuples/V21/user/arizzi/VHBBHeppyV21/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V21_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160316_150654/0000/"
 
@@ -269,7 +273,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         print "Processing event ", iev+1
 
     #There can't be less than 2 Higgs jets
-    if len(ev.hJidx) < 2:
+    if len(ev.hJCidx) < 2:
         continue
 
     #Discard all entries w Vtype not equal to either 0 or 1. (1: V -> e+e- / e-v_e, 0: V -> mumu / mu v_mu )
@@ -318,7 +322,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     higgs_vector_m = ROOT.TLorentzVector()
     higgs_vector = ROOT.TLorentzVector()
     
-    for idx in ev.hJidx:
+    for idx in ev.hJCidx:
         cur_v = ROOT.TLorentzVector()
         cur_v.SetPtEtaPhiM(ev.Jet_pt_reg[idx], ev.Jet_eta[idx], ev.Jet_phi[idx], ev.Jet_mass[idx])
         higgs_vector_m_reg += cur_v
@@ -332,12 +336,12 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
     #We wanna use Jet_pt_reg for Higgs jets (which we assume to be B-flavoured) and regular Jet_pt for the rest. 
     custom_pts = ev.Jet_pt
-    for idx in ev.hJidx:
+    for idx in ev.hJCidx:
         custom_pts[idx] = ev.Jet_pt_reg[idx]
 
     #Assign flavours to the jets. Higgs jets-> 5, else: 0
     Flavours = np.zeros(ev.nJet)
-    for idx in ev.hJidx:
+    for idx in ev.hJCidx:
         Flavours[idx] = 5
 
     for jets in xrange(ev.nJet):
@@ -350,8 +354,8 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     
     #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
     higgs_bools = []
-    for H_jets in xrange(len(ev.hJidx)):
-        if (custom_pts[ev.hJidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJidx[H_jets]] != 5:
+    for H_jets in xrange(len(ev.hJCidx)):
+        if (custom_pts[ev.hJCidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJCidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJCidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJCidx[H_jets]] != 5:
             higgs_bools.append(True)
     if any(higgs_bools):
         if print_discriminating_reasons:
@@ -370,7 +374,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
     higgs_indices = []
     for i in xrange(ev.nJet):
-        if i in ev.hJidx:
+        if i in ev.hJCidx:
             higgs_indices.append(1)
         else:
             higgs_indices.append(0)
@@ -470,7 +474,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     Lorentzvectors_before.append(lepton_vector)
 
     higgs_vector_before = []
-    for i in ev.hJidx:
+    for i in ev.hJCidx:
         v = ROOT.TLorentzVector()
         v.SetPtEtaPhiM(Theta[0,i], ev.Jet_eta[i], ev.Jet_phi[i], ev.Jet_mass[i])
         higgs_vector_before.append(v)
