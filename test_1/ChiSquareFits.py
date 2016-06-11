@@ -314,7 +314,6 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         
     #Theta are the estimated values for the jet pts
     Theta = LagrangianSolver(A, L, V, R, custom_pts)
-
     Theta_before = Theta
 
     #Save the estimation before cutting of happens
@@ -355,12 +354,10 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         else: 
             higgs_indices.append(0)
 
-    if any(x < 0 for x in Theta[0,:].tolist()[0]):
+    if any(x < 0 for x in Theta[0,:].tolist()[0]) and ev.nJet > 2:
         contains_negativevalue = True
 
     original_indices = np.arange(ev.nJet)
-#    print "-------------------------------"
-#    print "Event number : ", iev
 
     #Note that if contains_negativevalue isnt True on the first try, then the loop won't start at all
     while contains_negativevalue == True:
@@ -377,10 +374,6 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
         higgs_indices_scope = [higgs_indices[idx] for idx in best_indices]
         original_indices = [original_indices[i] for idx in best_indices]
 
-        if len(best_indices) < 2:
-            continue_or_not = 1.0
-            break
-
         A = A_matrix(a,b, len(best_indices))
         V = V_matrix(new_regions_scope, len(best_indices), new_theta_scope, new_etas_scope, new_flavours_scope, RootFile)
 
@@ -390,7 +383,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
         L,R = L_matrix_and_R_vector(len(best_indices), new_theta_scope, ev.V_pt, ev.V_eta, ev.V_phi, ev.V_mass, new_phis_scope, new_masses_scope, new_etas_scope)
         Theta = LagrangianSolver(A,L,V,R, new_theta_scope)
-#        print Theta, "Theta inside iteration"
+
         for i in xrange(Theta[0,:].shape[1]):
             if Theta[0,i] < 0:
                 contains_negativevalue = True
@@ -404,17 +397,20 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
         iteration_counter += 1
 
+        if len(best_indices) == 2:
+            break
+
     for pt in Theta[0,:].tolist()[0]:
         if pt < 0:
             still_negative_value_left = True
             
     scale_factors = np.zeros(len(final_indices))
     for i in xrange(len(scale_factors)):
-        scale_factors[i] = Theta[0,i]/custom_pts[final_indices[i]]
+        scale_factors[i] = Theta[0,i]/custom_pts[original_indices[i]]
 
     new_masses = np.zeros(len(final_indices))
     for i in xrange(len(new_masses)):
-        new_masses[i] = ev.Jet_mass[final_indices[i]]*scale_factors[i]
+        new_masses[i] = ev.Jet_mass[original_indices[i]]*scale_factors[i]
 
     Lorentzvectors = []
     for i in xrange(len(Theta[0,:].tolist()[0])):
@@ -460,7 +456,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     for i in xrange(len(original_indices)):
         cur_v = ROOT.TLorentzVector()
         if okay[original_indices[i]] == 1:
-            cur_v.SetPtEtaPhiM(Theta[0,i], ev.Jet_eta[original_indices[i]], ev.Jet_phi[original_indices[i]], ev.Jet_mass[original_indices[i]])
+            cur_v.SetPtEtaPhiM(Theta[0,i], ev.Jet_eta[original_indices[i]], ev.Jet_phi[original_indices[i]], new_masses[i])
             higgs_vector += cur_v
     
 #    print addup.M(), "Estimated Higgs mass after first estimation"
@@ -475,15 +471,27 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
     #Fill up the output tree with the results and some metadata
     nJet[0] = ev.nJet
-    nJet_after_it[0] = len(original_indices)
+    nJet_after_it[0] = Theta[0,:].shape[1]
+
+    if still_negative_value_left or continue_or_not:
+        nJet_after_it[0] = ev.nJet
 
     if continue_or_not == 1.0 or still_negative_value_left or sum(higgs_indices) < 2:
+
+#        print higgs_indices, "Higgs indices if estimation failed"
+#        print ev.nJet, "ev.nJet"
+#        print original_indices, "original indices"
+#        print Theta, "Theta"
+#        print nJet_after_it[0], "nJet after it"
+ 
         Chisquare[0] = 0.0
         est_mass[0] = 0.0
-        for i in xrange(nJet_after_it):
+        for i in xrange(ev.nJet):
             estimates[i] = 0.0
-            higgs_tag[i] = higgs_indices[i]
-        
+            if i in ev.hJidx:
+                higgs_tag[i] = 1
+            else:
+                higgs_tag[i] = 0
     else:
         Chisquare[0] = ChiSquare(V, Theta[0,:].tolist()[0], [custom_pts[i] for i in original_indices])
         est_mass[0] = higgs_vector.M()
