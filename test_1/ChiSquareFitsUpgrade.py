@@ -191,10 +191,10 @@ def LagrangianSolver(A, L, V,  R, jet_pts):
     return np.dot(np.dot(F,np.dot(A_tr,V_inv)), jet_pts) + np.dot(np.transpose(G),R)
 
 #Create a new ROOT File where the Chi square fits will be saved in the end & load the address of the data
-out = ROOT.TFile("Current_Root_Files/V21_ChiSquareFitsUpgrade_hJCidx.root", "UPDATE")
+out = ROOT.TFile("Current_Root_Files/Jet_hadronFlavour_independent/V21_ChiSquareFitsUpgrade_hJCidx.root", "UPDATE")
 #address = "dcap://t3se01.psi.ch:22125////pnfs/psi.ch/cms/trivcat/store/t3groups/ethz-higgs/run2/VHBBHeppyV20/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V20_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160209_172236/0000/"
 address = "root://188.184.38.46:1094//store/group/phys_higgs/hbb/ntuples/V21/user/arizzi/VHBBHeppyV21/ZH_HToBB_ZToLL_M125_13TeV_powheg_pythia8/VHBB_HEPPY_V21_ZH_HToBB_ZToLL_M125_13TeV_powheg_Py8__fall15MAv2-pu25ns15v1_76r2as_v12-v1/160316_150654/0000/"
-
+#address = "root://stormgf1.pi.infn.it:1094//store/user/arizzi/VHBBHeppyV21/TT_TuneCUETP8M1_13TeV-powheg-pythia8/VHBB_HEPPY_V21a_TT_TuneCUETP8M1_13TeV-powheg-Py8__fall15MAv2-pu25ns15v1_76r2as_v12_ext3-v1/160324_170631/0000/"
 #Create an empty Tree 
 tree = ROOT.TTree("ChiSquareFits", "Tree containing results from kinematic fit")
 
@@ -263,6 +263,7 @@ chain.SetBranchStatus("hJCidx", True)
 print "Total number of entries: ", chain.GetEntries()
 
 no_fitted_events = 0.0
+difference_counter = 0.0
 
 #To speed up runtime 3e+3 instead of 1e+11, i.e. only load the first 3000 events.
 for iev in range(int( min(1e+11, chain.GetEntries()))):
@@ -355,7 +356,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
     higgs_bools = []
     for H_jets in xrange(len(ev.hJCidx)):
-        if (custom_pts[ev.hJCidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJCidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJCidx[H_jets]] < -2.4) or ev.Jet_hadronFlavour[ev.hJCidx[H_jets]] != 5:
+        if (custom_pts[ev.hJCidx[H_jets]] < 20) or (ev.Jet_eta[ev.hJCidx[H_jets]] > 2.4) or (ev.Jet_eta[ev.hJCidx[H_jets]] < -2.4) or (ev.Jet_hadronFlavour[ev.hJCidx[H_jets]] != 5):
             higgs_bools.append(True)
     if any(higgs_bools):
         if print_discriminating_reasons:
@@ -396,7 +397,6 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 #    print "-----------"
 #    print [ev.Jet_pt[i] for i in xrange(ev.nJet)], "Original PTs" 
 #    print Theta, "First estimation and its ChiSquare: ",  ChiSquare(V, Theta[0,:].tolist()[0], custom_pts)
-
     all_arrays = all_subarrays(ev.nJet, higgs_indices)
 
     lowest_ChiSquare = ChiSquare(V, Theta[0,:].tolist()[0], custom_pts)
@@ -462,7 +462,14 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 
 #    print [ev.Jet_mass[i] for i in corresponding_indices]
 #    print new_masses
-        
+    was_first_estimation_positive = True
+    for pt in Theta_before[0,:].tolist()[0]:
+        if pt < 0:
+            was_first_estimation_positive = False
+
+    if was_first_estimation_positive and (len(corresponding_indices) != len(Theta_before[0,:].tolist()[0])):
+        difference_counter += 1
+                                                                              
 
     Lorentzvectors_before = []
     for i in xrange(Theta_before.shape[1]):
@@ -541,8 +548,16 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
 #    print addup.M(), "Estimated Higgs mass after first estimation"
 #    print "Estimated Higgs mass: ", higgs_vector.M()
 #    print "Measured Higgs mass: ", higgs_vector_m.M()
- #   print len(final_indices), "nJet after it"
- #   print final_indices, "final indices"
+#    print ev.nJet, "nJet"
+#    print len(corresponding_indices), "nJet after it"
+#    print Theta, "first estimation"
+#    print corresponding_result, "estimated pts"
+#    print [ev.Jet_pt[i] for i in xrange(len(ev.Jet_pt))], "original pts"
+#    print corresponding_indices, "corresponding indices"
+#    if ev.nJet != len(corresponding_indices):
+#        print difference_counter
+
+    
     no_fitted_events += 1
 
     #Fill up the output tree with the results and some metadata
@@ -550,7 +565,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     nJet_after_it[0] = len(corresponding_indices)
 
     if still_negative_value_left:
-        Chisquare[0] = 0.0
+        Chisquare[0] = 999.9
         est_mass[0] = 0.0
         for i in xrange(nJet_after_it):
             estimates[i] = 0.0
@@ -573,6 +588,7 @@ for iev in range(int( min(1e+11, chain.GetEntries()))):
     tree.Fill()
 
 print "We found ",no_fitted_events, " fitting events"    
+print "of which ", difference_counter, "resulted in a different result than the old version"
 out.cd()
 tree.Write("", ROOT.TObject.kOverwrite)
 out.Close()
