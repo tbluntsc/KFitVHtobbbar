@@ -160,66 +160,43 @@ class Estimation():
     def __init__(self):
 
         self.Resolutions = ROOT.TFile("V21_SigmasFits_fixedNames.root")
-        self.Discriminate = "Not yet filled"
         self.original_pts = "Not yet filled"
         self.Flavours = "Not yet filled"
         self.discr_lessthan2Higgsjets = 0
-        self.discr_Vtype = 0
-        self.discr_Vpt = 0
         self.discr_lessthan2jets = 0
         self.discr_noresolution = 0
         self.discr_HiggsPtEtaFlavour = 0
         print "Resolutions successfully loaded"
         
     # Returns a boolean value for whether the event should be discriminated or not, the original pts w. normalized mean & the 
-    def Discriminate_and_custompts(self, event, print_discriminating_reasons = False):
-        self.Discriminate = False
-        self.used_up = False
+    def Discriminate_and_custompts(self, Jet_pt, Jet_pt_reg, Jet_eta, Jet_phi, Jet_mass, hJCidx, print_discriminating_reasons = False):
 
         #There can't be less than 2 Higgs jets
-        if len(event.hJCidx) < 2:
-            self.Discriminate = True
-            if self.used_up == False:
-                self.discr_lessthan2Higgsjets += 1
-            self.used_up = True
-        #Discard all entries w Vtype not equal to either 0 or 1. (1: V -> e+e- / e-v_e, 0: V -> mumu / mu v_mu )
-        if (event.Vtype != 0) & (event.Vtype != 1):
-            if print_discriminating_reasons:
-                print "VType neither 0 or 1, Vtype = ", str(event.Vtype) 
-            self.Discriminate = True
-            if self.used_up == False:
-                self.discr_Vtype += 1
-            self.used_up = True
-        #Discard all entries w Vectorboson Momentum smaller than 50 Gevent
-        if event.V_pt < 50:
-            if print_discriminating_reasons:
-                print "V_pt < 50, V_pt = ", str(event.V_pt)
-            self.Discriminate = True
-            if self.used_up == False:
-                self.discr_Vpt += 1
-            self.used_up = True
+        if len(hJCidx) < 2:
+            self.discr_lessthan2Higgsjets += 1
+            return True
+
         #Discard events where only one jet was produced
-        if event.nJet < 2:
+        if len(Jet_pt) < 2:
             if print_discriminating_reasons:
                 print "Less than two jets"
-            self.Discriminate = True
-            if self.used_up == False:
-                self.discr_lessthan2jets += 1
-            self.used_up = True
+            self.discr_lessthan2jets += 1
+            return True
+
         # eta0: abs(eta) in [0.0,1.0]
         # eta1: abs(eta) in [1.0,1.5]
         # eta2: abs(eta) in [1.5,2.0]
         # eta3: abs(eta) in [2.0,2.5]
 
-        regions = np.zeros(event.nJet)
-        for jets in xrange(event.nJet):
-            if (np.absolute(event.Jet_eta[jets]) > 0.0 and np.absolute(event.Jet_eta[jets]) < 1.0):
+        regions = np.zeros(len(Jet_pt))
+        for jets in xrange(len(Jet_pt)):
+            if (np.absolute(Jet_eta[jets]) > 0.0 and np.absolute(Jet_eta[jets]) < 1.0):
                 regions[jets] = 0
-            elif (np.absolute(event.Jet_eta[jets]) > 1.0 and np.absolute(event.Jet_eta[jets]) < 1.5):
+            elif (np.absolute(Jet_eta[jets]) > 1.0 and np.absolute(Jet_eta[jets]) < 1.5):
                 regions[jets] = 1
-            elif (np.absolute(event.Jet_eta[jets]) > 1.5 and np.absolute(event.Jet_eta[jets]) < 2.0):
+            elif (np.absolute(Jet_eta[jets]) > 1.5 and np.absolute(Jet_eta[jets]) < 2.0):
                 regions[jets] = 2
-            elif (np.absolute(event.Jet_eta[jets]) > 2.0 and np.absolute(event.Jet_eta[jets]) < 2.5):
+            elif (np.absolute(Jet_eta[jets]) > 2.0 and np.absolute(Jet_eta[jets]) < 2.5):
                 regions[jets] = 3
             else: 
                 regions[jets] = 99
@@ -227,58 +204,55 @@ class Estimation():
         if any(x == 99 for x in regions):
             if print_discriminating_reasons:
                 print "Jet w Eta not in any of the 4 regions"
-            self.Discriminate = True
-            if self.used_up == False:
-                self.discr_noresolution += 1
-            self.used_up = True
+            self.discr_noresolution += 1
+            return True
 
-        Flavours = np.zeros(event.nJet)
-        for idx in event.hJCidx:
+        Flavours = np.zeros(len(Jet_pt))
+        for idx in hJCidx:
             Flavours[idx] = 5
 
         #We wanna use Jet_pt_reg for Higgs jets (which we assume to be B-flavoured) and regular Jet_pt for the rest. 
-        custom_pts = np.zeros(event.nJet)
-        for i in xrange(event.nJet):
-            custom_pts[i] = event.Jet_pt[i]
-        for idx in event.hJCidx:
-            custom_pts[idx] = event.Jet_pt_reg[idx]
-            
-        if self.Discriminate == False:
-            for jets in xrange(event.nJet):
+        custom_pts = np.zeros(len(Jet_pt))
+        for i in xrange(len(Jet_pt)):
+            custom_pts[i] = Jet_pt[i]
+        for idx in hJCidx:
+            custom_pts[idx] = Jet_pt_reg[idx]
+
+        for jets in xrange(len(Jet_pt)):
     
-                histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(Flavours[jets]))
-                self.Resolutions.cd()
-                current_histo = ROOT.gDirectory.Get(histo_string)
-                myfunc = current_histo.GetFunction("mean_func")
-                custom_pts[jets] = custom_pts[jets]/(myfunc.Eval(custom_pts[jets]))
+            histo_string = "Mean_" + str(int(regions[jets])) + "_" + str(int(Flavours[jets]))
+            self.Resolutions.cd()
+            current_histo = ROOT.gDirectory.Get(histo_string)
+            myfunc = current_histo.GetFunction("mean_func")
+            custom_pts[jets] = custom_pts[jets]/(myfunc.Eval(custom_pts[jets]))
 
         #Discard all entries w Higgs-tagged Jets that have PT < 20 or |eta| > 2.4
-            higgs_bools = []
-            for H_jets in xrange(len(event.hJCidx)):
-                if (custom_pts[event.hJCidx[H_jets]] < 20) or (event.Jet_eta[event.hJCidx[H_jets]] > 2.4) or (event.Jet_eta[event.hJCidx[H_jets]] < -2.4):
-                    higgs_bools.append(True)
-            if any(higgs_bools):
-                if print_discriminating_reasons:
-                    print "Higgs jet w pt < 20 or |eta| > 2.4 in event ", str(ievent)
-                self.Discriminate = True
-                if self.used_up == False:
-                    self.discr_HiggsPtEtaFlavour += 1
-                self.used_up = True
+        higgs_bools = []
+        for H_jets in xrange(len(hJCidx)):
+            if (custom_pts[hJCidx[H_jets]] < 20) or (Jet_eta[hJCidx[H_jets]] > 2.4) or (Jet_eta[hJCidx[H_jets]] < -2.4):
+                higgs_bools.append(True)
+        if any(higgs_bools):
+            if print_discriminating_reasons:
+                print "Higgs jet w pt < 20 or |eta| > 2.4 in event "
+            self.discr_HiggsPtEtaFlavour += 1
+            return True
 
         self.original_pts = custom_pts
         self.Flavours = Flavours
         self.regions = regions
 
+        return False
+
     # Returns the estimated pts & an array containing the indices missing the deleted entry. If the estimation didnt return
     # an array with all positive pts, event.Jet_pt and np.arange(event.nJet) are returned
-    def est_pts(self, event):
+    def est_pts(self, Jet_pt, Jet_pt_reg, Jet_eta, Jet_phi, Jet_mass, hJCidx, V_pt, V_eta, V_phi, V_mass):
         
         #We wanna use Jet_pt_reg for Higgs jets (which we assume to be B-flavoured) and regular Jet_pt for the rest. 
         custom_pts = self.original_pts
 
         higgs_indices = []
-        for i in xrange(event.nJet):
-            if i in event.hJCidx:
+        for i in xrange(len(Jet_pt)):
+            if i in hJCidx:
                 higgs_indices.append(1)
             else:
                 higgs_indices.append(0)
@@ -292,35 +266,35 @@ class Estimation():
         a = 1.0
         b = 0.0
 
-        A = A_matrix(a,b, event.nJet)
+        A = A_matrix(a,b, len(Jet_pt))
         
         if np.linalg.matrix_rank(A) != A.shape[0]:
             print "Matrix A is singular"
             self.estimated_pts = custom_pts
-            self.indices = np.arange(event.nJet)
-            self.estimation_successful = False
+            self.indices = np.arange(len(Jet_pt))
+            return False
 
-        V = V_matrix(self.regions, event.nJet, self.original_pts, event.Jet_eta, self.Flavours, self.Resolutions)
+        V = V_matrix(self.regions, len(Jet_pt), self.original_pts, Jet_eta, self.Flavours, self.Resolutions)
         
         if np.linalg.matrix_rank(V) !=V.shape[0]:
             print "Matrix V is singular"
             self.estimated_pts = custom_pts
-            self.indices = np.arange(event.nJet)
-            self.estimation_successful = False
+            self.indices = np.arange(len(Jet_pt))
+            return False
 
-        L, R = L_matrix_and_R_vector(event.nJet, self.original_pts, event.V_pt, event.V_eta, event.V_phi, event.V_mass, event.Jet_phi, event.Jet_mass, event.Jet_eta)
+        L, R = L_matrix_and_R_vector(len(Jet_pt), self.original_pts, V_pt, V_eta, V_phi, V_mass, Jet_phi, Jet_mass, Jet_eta)
 
         Theta = LagrangianSolver(A, L, V, R, self.original_pts)
 
         #List containing all possible index combinations w nJet, nJet-1, ..., len(ev.hJCidx) jets without deleting any Higgs jets.
-        all_arrays = all_subarrays(event.nJet, higgs_indices)
+        all_arrays = all_subarrays(len(Jet_pt), higgs_indices)
 
         #Inialize first guess for best estimation
         lowest_ChiSquare = ChiSquare(V, Theta[0,:].tolist()[0], self.original_pts)
-        max_prob = ROOT.TMath.Prob(lowest_ChiSquare, event.nJet)
+        max_prob = ROOT.TMath.Prob(lowest_ChiSquare, len(Jet_pt))
         corresponding_result = Theta
-        corresponding_indices = np.zeros(event.nJet, dtype = int)
-        for i in xrange(event.nJet):
+        corresponding_indices = np.zeros(len(Jet_pt), dtype = int)
+        for i in xrange(len(Jet_pt)):
             corresponding_indices[i] = i
 
         if all_arrays != []:
@@ -328,29 +302,29 @@ class Estimation():
                 iteration_regions = [self.regions[i] for i in index_arrays[0]]
                 iteration_nJet = len(iteration_regions)
                 iteration_pts = [custom_pts[i] for i in index_arrays[0]]
-                iteration_etas = [event.Jet_eta[i] for i in index_arrays[0]]
+                iteration_etas = [Jet_eta[i] for i in index_arrays[0]]
                 iteration_Flavours = [self.Flavours[i] for i in index_arrays[0]]
-                iteration_phis = [event.Jet_phi[i] for i in index_arrays[0]]
-                iteration_masses = [event.Jet_mass[i] for i in index_arrays[0]]
+                iteration_phis = [Jet_phi[i] for i in index_arrays[0]]
+                iteration_masses = [Jet_mass[i] for i in index_arrays[0]]
             
                 V = V_matrix(iteration_regions, iteration_nJet, iteration_pts, iteration_etas, iteration_Flavours, self.Resolutions)
                 if np.linalg.matrix_rank(V) !=V.shape[0]:
                     self.estimated_pts = custom_pts
-                    self.indices = np.arange(event.nJet)
-                    self.estimation_successful = False
+                    self.indices = np.arange(len(Jet_pt))
+                    return False
 
-                L, R = L_matrix_and_R_vector(iteration_nJet, iteration_pts, event.V_pt, event.V_eta, event.V_phi, event.V_mass, iteration_phis, iteration_masses, iteration_etas)
+                L, R = L_matrix_and_R_vector(iteration_nJet, iteration_pts, V_pt, V_eta, V_phi, V_mass, iteration_phis, iteration_masses, iteration_etas)
                 if np.linalg.matrix_rank(L) !=L.shape[0]:
                     self.estimated_pts = custom_pts
-                    self.indices = np.arange(event.nJet)
-                    self.estimation_successful = False
+                    self.indices = np.arange(len(Jet_pt))
+                    return False
 
                 A = A_matrix(a,b, len(index_arrays[0]))
                 if np.linalg.matrix_rank(A) !=A.shape[0]:
                     self.estimated_pts = custom_pts
-                    self.indices = np.arange(event.nJet)
-                    self.estimation_successful = False                    
-            
+                    self.indices = np.arange(len(Jet_pt))
+                    return False
+
                 iteration_result = LagrangianSolver(A, L, V, R, iteration_pts)
                 iteration_ChiSquare = ChiSquare(V, iteration_result[0,:].tolist()[0], iteration_pts)
                 iteration_prob = ROOT.TMath.Prob(iteration_ChiSquare, iteration_nJet)
@@ -365,6 +339,7 @@ class Estimation():
                         corresponding_result = iteration_result
                         corresponding_indices = index_arrays[0]
 
+
         still_negative_value_left = False
 
         for pt in corresponding_result[0,:].tolist()[0]:
@@ -373,15 +348,17 @@ class Estimation():
         
         if still_negative_value_left:
             self.estimated_pts = custom_pts
-            self.indices = np.arange(event.nJet)
-            self.estimation_successful = False
+            self.indices = np.arange(len(Jet_pt))
+            return False
+
         else:
             self.estimated_pts = corresponding_result[0,:].tolist()[0]
             self.indices = corresponding_indices
-            self.estimation_successful = True
+            return True
+
 
     # Uses est_pts & custom_pts to calculate the scale factors, i.e. the first order approximation w. which the masses have to be rescaled after estimation
-    def scale_factors(self, event):
+    def scale_factors(self):
 
         pts = self.estimated_pts
         indices = self.indices
@@ -396,10 +373,9 @@ class Estimation():
         self.scalefactors = scale_factors
 
     # Uses est_pts & scale_factors to calculate the est_mass. If estimation failed this is simply mea_mass
-    def mass(self, event):
+    def mass(self, Jet_pt, Jet_pt_reg, Jet_eta, Jet_phi, Jet_mass, hJCidx, V_pt, V_eta, V_phi, V_mass):
 
-        self.est_pts(event)
-        self.scale_factors(event)
+        self.scale_factors()
 
         pts = self.estimated_pts
         indices = self.indices
@@ -411,10 +387,10 @@ class Estimation():
 
         new_masses = np.zeros(len(indices))
         for i in xrange(len(new_masses)):
-            new_masses[i] = event.Jet_mass[indices[i]]*scale_factors[i]
+            new_masses[i] = Jet_mass[indices[i]]*scale_factors[i]
 
-        higgs_indc = np.zeros(event.nJet, dtype= int)
-        for idx in event.hJCidx:
+        higgs_indc = np.zeros(len(Jet_pt), dtype= int)
+        for idx in hJCidx:
             higgs_indc[idx] = 1
 
         higgs_post_est = [higgs_indc[i] for i in indices]
@@ -422,16 +398,16 @@ class Estimation():
         for i in xrange(len(indices)):
             if higgs_post_est[i] == 1:
                 v = ROOT.TLorentzVector()
-                v.SetPtEtaPhiM(pts[i], event.Jet_eta[indices[i]], event.Jet_phi[indices[i]], new_masses[i])
+                v.SetPtEtaPhiM(pts[i], Jet_eta[indices[i]], Jet_phi[indices[i]], new_masses[i])
                 est_vector += v
 
-        for idx in event.hJCidx:
+        for idx in hJCidx:
             v = ROOT.TLorentzVector()
-            v.SetPtEtaPhiM(event.Jet_pt_reg[idx], event.Jet_eta[idx], event.Jet_phi[idx], event.Jet_mass[idx])
+            v.SetPtEtaPhiM(Jet_pt_reg[idx], Jet_eta[idx], Jet_phi[idx], Jet_mass[idx])
             mea_vector_reg += v
 
             v = ROOT.TLorentzVector()
-            v.SetPtEtaPhiM(event.Jet_pt[idx], event.Jet_eta[idx], event.Jet_phi[idx], event.Jet_mass[idx])
+            v.SetPtEtaPhiM(Jet_pt[idx], Jet_eta[idx], Jet_phi[idx], Jet_mass[idx])
             mea_vector += v
         
         self.measured_mass_reg = mea_vector_reg.M()
